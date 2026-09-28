@@ -30,7 +30,9 @@ export async function extractText(data: Buffer, mime: string): Promise<string> {
   const { PDFParse } = await import('pdf-parse');
   const parser = new PDFParse({ data: new Uint8Array(data) });
   try {
-    return (await parser.getText()).text;
+    // Join pages ourselves: the default output interleaves "-- 1 of N --" markers,
+    // which would end up inside chunks and citations.
+    return (await parser.getText()).pages.map((p) => p.text.trim()).join('\n\n');
   } catch {
     throw new BadRequestException('Could not read that PDF (it may be encrypted or corrupted)');
   } finally {

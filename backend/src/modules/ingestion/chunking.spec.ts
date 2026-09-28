@@ -1,6 +1,7 @@
 import { CHUNK_OVERLAP, CHUNK_SIZE, chunkText } from './chunking';
 
-const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(' ');
+// Varied word lengths, so cut points don't happen to align with word boundaries.
+const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}${'x'.repeat(i % 7)}`).join(' ');
 
 describe('chunkText', () => {
   it('returns nothing for blank input', () => {
@@ -22,11 +23,11 @@ describe('chunkText', () => {
     }
   });
 
-  it('does not split words when whitespace is available', () => {
-    const chunks = chunkText(words(1000));
-    for (const c of chunks) {
-      expect(c).toMatch(/^word\d+/);
-      expect(c).toMatch(/word\d+$/);
+  it('does not split words at either end when whitespace is available', () => {
+    const text = words(1000);
+    const vocabulary = new Set(text.split(' '));
+    for (const c of chunkText(text)) {
+      for (const token of c.split(/\s+/)) expect(vocabulary.has(token)).toBe(true);
     }
   });
 
@@ -34,7 +35,7 @@ describe('chunkText', () => {
     const text = words(1000);
     const chunks = chunkText(text);
     expect(chunks[0].startsWith('word0 ')).toBe(true);
-    expect(chunks.at(-1)!.endsWith('word999')).toBe(true);
+    expect(chunks.at(-1)!.endsWith(text.split(' ').at(-1)!)).toBe(true);
   });
 
   it('is deterministic, so chunk ids stay stable across re-ingestion', () => {
