@@ -1,0 +1,289 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+enum AnswerChannel {
+  console
+  mcp
+  widget
+}
+
+type AnswerLog {
+  channel: AnswerChannel!
+  citedChunkIds: [String!]!
+  confidence: Float
+  createdAt: DateTime!
+  decisionNote: String
+  decisionTrace: [TraceStepModel!]!
+  faqMatchId: ID
+  id: ID!
+  latencyMs: Int
+  model: String
+  query: String!
+  retrievedChunkIds: [String!]!
+  tier: AnswerTier!
+  tokensIn: Int
+  tokensOut: Int
+  topSimilarity: Float
+}
+
+type AnswerLogPage {
+  items: [AnswerLog!]!
+
+  """Tier distribution for the same filter, ignoring the tier filter itself"""
+  tierCounts: [TierCount!]!
+  total: Int!
+
+  """Total tokens (in + out) for the same filter"""
+  totalTokens: Int!
+}
+
+type AnswerResult {
+  answer: String!
+  answerId: ID!
+  citations: [CitationModel!]!
+  confidence: Float
+  faqMatchId: ID
+  latencyMs: Int!
+  tier: AnswerTier!
+  topSimilarity: Float
+  trace: [TraceStepModel!]!
+}
+
+"""Which rung of the resilience ladder produced the answer"""
+enum AnswerTier {
+  ai_answer
+  faq_floor
+  rag_snippets
+}
+
+input AnswersFilterInput {
+  channel: AnswerChannel
+  limit: Int! = 25
+  offset: Int! = 0
+  search: String
+  tier: AnswerTier
+}
+
+type CitationModel {
+  chunkId: ID!
+  documentId: ID!
+  documentTitle: String!
+  similarity: Float!
+  snippet: String!
+}
+
+input CreateDocumentFromTextInput {
+  content: String!
+  title: String!
+  visibility: Visibility! = internal
+}
+
+input CreateWorkspaceInput {
+  name: String!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Document {
+  byteSize: Int
+  chunkCount: Int!
+  createdAt: DateTime!
+  error: String
+  id: ID!
+  mimeType: String
+  sourceType: String!
+  status: DocumentStatus!
+  title: String!
+  updatedAt: DateTime!
+  visibility: Visibility!
+}
+
+enum DocumentStatus {
+  failed
+  pending
+  processing
+  ready
+}
+
+type Faq {
+  answer: String!
+  createdAt: DateTime!
+  id: ID!
+  keywords: [String!]!
+  question: String!
+}
+
+input FaqInput {
+  answer: String!
+
+  """Words or phrases; matched as whole words against the question"""
+  keywords: [String!]!
+  question: String!
+}
+
+type IngestionProgress {
+  chunkCount: Int
+  documentId: ID!
+  error: String
+  percent: Int!
+  status: IngestionStatus!
+}
+
+enum IngestionStatus {
+  failed
+  processing
+  ready
+  retrying
+}
+
+input InviteMemberInput {
+  email: String!
+  role: Role!
+}
+
+input LadderSettingsInput {
+  """Tier 1 answers below this model confidence fall to Tier 2"""
+  confidenceThreshold: Float!
+
+  """Retrieval below this cosine similarity skips straight to Tier 3"""
+  similarityFloor: Float!
+}
+
+type Member {
+  createdAt: DateTime!
+  displayName: String
+  email: String!
+  role: Role!
+  userId: ID!
+}
+
+type Mutation {
+  askQuestion(query: String!): AnswerResult!
+  createDocumentFromText(input: CreateDocumentFromTextInput!): Document!
+  createFaq(input: FaqInput!): Faq!
+
+  """
+  Creates a workspace you own. Switch to it via POST /auth/switch-workspace.
+  """
+  createWorkspace(input: CreateWorkspaceInput!): WorkspaceMembership!
+
+  """
+  GDPR erasure: deletes the document, its vectors, its original file and audit references
+  """
+  deleteDocument(id: ID!): Boolean!
+  deleteFaq(id: ID!): Boolean!
+  inviteMember(input: InviteMemberInput!): Member!
+  removeMember(userId: ID!): Boolean!
+  retryIngestion(id: ID!): Document!
+  rotateWidgetKey: WidgetConfig!
+  setDocumentVisibility(id: ID!, visibility: Visibility!): Document!
+  updateFaq(id: ID!, input: FaqInput!): Faq!
+  updateLadderSettings(input: LadderSettingsInput!): Workspace!
+  updateMemberRole(input: UpdateMemberRoleInput!): Member!
+  updateWidgetTheme(input: WidgetThemeInput!): WidgetConfig!
+}
+
+type Query {
+  answers(filter: AnswersFilterInput): AnswerLogPage!
+  documents: [Document!]!
+  faqs: [Faq!]!
+  members: [Member!]!
+  myWorkspaces: [WorkspaceMembership!]!
+  systemInfo: SystemInfo!
+  widgetConfig: WidgetConfig!
+
+  """The workspace the current access token is scoped to"""
+  workspace: Workspace!
+}
+
+enum Role {
+  admin
+  editor
+  owner
+  viewer
+}
+
+type Subscription {
+  ingestionProgress: IngestionProgress!
+}
+
+type SystemInfo {
+  aiProvider: String!
+  chatModel: String!
+  embeddingModel: String!
+  googleOAuth: Boolean!
+}
+
+type TierCount {
+  count: Int!
+  tier: AnswerTier!
+}
+
+enum TraceOutcome {
+  failed
+  ok
+  rejected
+  skipped
+}
+
+type TraceStepModel {
+  detail: String
+  ms: Int!
+  outcome: TraceOutcome!
+  step: String!
+}
+
+input UpdateMemberRoleInput {
+  role: Role!
+  userId: ID!
+}
+
+"""public documents are the only ones the anonymous widget can retrieve"""
+enum Visibility {
+  internal
+  public
+}
+
+type WidgetConfig {
+  """Documents the widget can draw on (visibility = public)"""
+  publicDocumentCount: Int!
+  rotatedAt: DateTime!
+  theme: WidgetTheme!
+
+  """Public, rotatable key embedded in customer pages"""
+  widgetKey: String!
+}
+
+type WidgetTheme {
+  greeting: String!
+  position: String!
+  primaryColor: String!
+  title: String!
+}
+
+input WidgetThemeInput {
+  greeting: String!
+  position: String!
+  primaryColor: String!
+  title: String!
+}
+
+type Workspace {
+  confidenceThreshold: Float!
+  createdAt: DateTime!
+  id: ID!
+  name: String!
+  plan: String!
+  similarityFloor: Float!
+  widgetKey: String!
+}
+
+type WorkspaceMembership {
+  name: String!
+  role: Role!
+  workspaceId: ID!
+}

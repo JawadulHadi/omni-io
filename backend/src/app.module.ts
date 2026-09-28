@@ -1,52 +1,102 @@
-import { Module } from "@nestjs/common";
-import { GraphQLModule } from "@nestjs/graphql";
-import { ApolloDriver, ApolloDriverConfig } from "@nestjs/apollo";
-import { JwtModule } from "@nestjs/jwt";
-import { ThrottlerModule } from "@nestjs/throttler";
-import { BullModule } from "@nestjs/bullmq";
-import { Pool } from "pg";
-
-import { AiService } from "./lib/ai.service";
-import { ConnectionsService } from "./lib/connections.service";
-
-import { AuthService } from "./modules/auth/auth.service";
-import { WorkspacesService } from "./modules/workspaces/workspaces.service";
-import { DocumentsService } from "./modules/documents/documents.service";
-import { ChunksRepository } from "./modules/ingestion/chunks.repository";
-import { IngestionProcessor } from "./modules/ingestion/ingestion.processor";
-import { AnswerService } from "./modules/answer/answer.service";
-import { FaqService } from "./modules/faq/faq.service";
-import { AuditService } from "./modules/audit/audit.service";
-import { WidgetController } from "./modules/widget/widget.controller";
-import { McpTools } from "./modules/mcp/mcp.tools";
-
-const pgPoolProvider = {
-  provide: Pool,
-  useFactory: () => new Pool({ connectionString: process.env.DATABASE_URL }),
-};
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { BullModule } from '@nestjs/bullmq';
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { GraphQLModule } from '@nestjs/graphql';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { join } from 'node:path';
+import './common/graphql-enums';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { AuthGuard } from './common/guards/auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
+import { Env, validateEnv } from './config/env';
+import { DbModule } from './db/db.module';
+import { AiModule } from './lib/ai/ai.module';
+import { ConnectionsService } from './lib/connections.service';
+import { StorageModule } from './lib/storage/blob-storage';
+import { AnswerModule } from './modules/answer/answer.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { DocumentsModule } from './modules/documents/documents.module';
+import { FaqModule } from './modules/faq/faq.module';
+import { HealthModule } from './modules/health/health.module';
+import { IngestionModule } from './modules/ingestion/ingestion.module';
+import { McpModule } from './modules/mcp/mcp.module';
+import { WidgetModule } from './modules/widget/widget.module';
+import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 
 @Module({
   imports: [
-    GraphQLModule.forRoot<ApolloDriverConfig>({ driver: ApolloDriver, autoSchemaFile: true }),
-    JwtModule.register({ secret: process.env.JWT_SECRET, signOptions: { expiresIn: "15m" } }),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
-    BullModule.forRoot({ connection: { url: process.env.REDIS_URL } }),
-    BullModule.registerQueue({ name: "ingestion" }),
+    ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnv }),
+    EventEmitterModule.forRoot(),
+    DbModule,
+    AiModule,
+    StorageModule,
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (cfg: ConfigService<Env, true>) => ({ connection: { url: cfg.get('REDIS_URL', { infer: true }) } }),
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (cfg: ConfigService<Env, true>) => ({
+        throttlers: [
+          { name: 'ip', ttl: 60_000, limit: cfg.get('WIDGET_LIMIT_PER_IP', { infer: true }) },
+          {
+            name: 'workspace',
+            ttl: 60_000,
+            limit: cfg.get('WIDGET_LIMIT_PER_WORKSPACE', { infer: true }),
+            getTracker: (req: Record<string, any>) => `widget:${req.params?.key ?? 'none'}`,
+          },
+        ],
+        storage: new ThrottlerStorageRedisService(cfg.get('REDIS_URL', { infer: true })),
+      }),
+    }),
+    GraphQLModule.forRootAsync<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      inject: [ConfigService],
+      useFactory: (cfg: ConfigService<Env, true>): ApolloDriverConfig => {
+        const production = cfg.get('NODE_ENV', { infer: true }) === 'production';
+        return {
+          autoSchemaFile: production ? true : join(process.cwd(), 'schema.gql'),
+          sortSchema: true,
+          playground: !production,
+          introspection: !production,
+          includeStacktraceInErrorResponses: false,
+          subscriptions: {
+            'graphql-ws': {
+              path: '/graphql',
+              // Browsers can't set headers on a WebSocket, so the token arrives in connectionParams.
+              onConnect: (ctx) => {
+                (ctx.extra as Record<string, unknown>).authorization = ctx.connectionParams?.authorization;
+              },
+            },
+          },
+          // Same `req` shape for HTTP and WebSocket, so AuthGuard works unchanged for subscriptions.
+          context: ({ req, res, extra }: { req?: unknown; res?: unknown; extra?: Record<string, unknown> }) =>
+            extra ? { req: { headers: { authorization: extra.authorization } } } : { req, res },
+        };
+      },
+    }),
+    AuthModule,
+    WorkspacesModule,
+    DocumentsModule,
+    IngestionModule,
+    FaqModule,
+    AnswerModule,
+    AuditModule,
+    WidgetModule,
+    McpModule,
+    HealthModule,
   ],
-  controllers: [WidgetController],
   providers: [
-    pgPoolProvider,
-    AiService,
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    // Order matters: authenticate first, then check the live role.
+    { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
     ConnectionsService,
-    AuthService,
-    WorkspacesService,
-    DocumentsService,
-    ChunksRepository,
-    IngestionProcessor,
-    AnswerService,
-    FaqService,
-    AuditService,
-    McpTools,
   ],
 })
 export class AppModule {}
