@@ -1,36 +1,64 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
-import { PlaygroundPage } from "./console/routes/playground";
+import { Loader2 } from 'lucide-react';
+import { lazy, type ReactNode } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { IngestionProgressProvider } from '@/components/ingestion/progress-context';
+import { ConsoleLayout } from '@/components/layout/console-layout';
+import { AuthProvider, useAuth } from '@/lib/auth';
+import { UrqlProvider } from '@/lib/urql';
+import { LoginPage } from './console/routes/login';
 
-// Stub pages — same shell pattern as PlaygroundPage; fill in per Section 6
-// of the architecture doc (documents, ingestion, FAQs, members, widget, audit).
-function StubPage({ name }: { name: string }) {
-  return <div className="p-6 text-slate-500">{name} — TODO</div>;
+// Route-level code splitting: each console screen is its own chunk.
+const PlaygroundPage = lazy(() => import('./console/routes/playground'));
+const DocumentsPage = lazy(() => import('./console/routes/documents'));
+const IngestionPage = lazy(() => import('./console/routes/ingestion'));
+const FaqsPage = lazy(() => import('./console/routes/faqs'));
+const MembersPage = lazy(() => import('./console/routes/members'));
+const WidgetPage = lazy(() => import('./console/routes/widget'));
+const AuditPage = lazy(() => import('./console/routes/audit'));
+
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { state } = useAuth();
+  const location = useLocation();
+  if (state.status === 'loading') {
+    return (
+      <div className="grid min-h-screen place-items-center" aria-busy="true">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Restoring session" />
+      </div>
+    );
+  }
+  if (state.status === 'anonymous') return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  return children;
 }
 
 export function App() {
   return (
-    <BrowserRouter>
-      <div className="flex min-h-screen">
-        <nav className="w-56 border-r p-4 space-y-2">
-          <div className="font-semibold mb-4">Omni.io</div>
-          <Link className="block text-sm" to="/">Playground</Link>
-          <Link className="block text-sm" to="/documents">Documents</Link>
-          <Link className="block text-sm" to="/faqs">FAQs</Link>
-          <Link className="block text-sm" to="/members">Members</Link>
-          <Link className="block text-sm" to="/widget">Widget</Link>
-          <Link className="block text-sm" to="/audit">Answer audit</Link>
-        </nav>
-        <main className="flex-1">
-          <Routes>
-            <Route path="/" element={<PlaygroundPage />} />
-            <Route path="/documents" element={<StubPage name="Documents" />} />
-            <Route path="/faqs" element={<StubPage name="FAQs" />} />
-            <Route path="/members" element={<StubPage name="Members" />} />
-            <Route path="/widget" element={<StubPage name="Widget config" />} />
-            <Route path="/audit" element={<StubPage name="Answer audit" />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            element={
+              <RequireAuth>
+                <UrqlProvider>
+                  <IngestionProgressProvider>
+                    <ConsoleLayout />
+                  </IngestionProgressProvider>
+                </UrqlProvider>
+              </RequireAuth>
+            }
+          >
+            <Route index element={<Navigate to="/playground" replace />} />
+            <Route path="playground" element={<PlaygroundPage />} />
+            <Route path="documents" element={<DocumentsPage />} />
+            <Route path="ingestion" element={<IngestionPage />} />
+            <Route path="faqs" element={<FaqsPage />} />
+            <Route path="members" element={<MembersPage />} />
+            <Route path="widget" element={<WidgetPage />} />
+            <Route path="audit" element={<AuditPage />} />
+            <Route path="*" element={<Navigate to="/playground" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
