@@ -1,5 +1,5 @@
 import { normalizeForMatch } from '../../modules/faq/faq.service';
-import { hashEmbed } from './fake.provider';
+import { extractiveAnswer, hashEmbed } from './fake.provider';
 import { buildUserPrompt } from './prompt';
 
 describe('buildUserPrompt', () => {
@@ -32,5 +32,18 @@ describe('fake embeddings', () => {
 
   it('never produce a zero vector', () => {
     expect(hashEmbed('the a of').some((x) => x !== 0)).toBe(true);
+  });
+});
+
+describe('fake extractive answers', () => {
+  const passage = '# Shipping\n\nExpress shipping has a flat cost of 9 USD. Orders ship the same day. Customs duties are paid by the recipient.';
+
+  it('picks the sentences most related to the question and drops headings', () => {
+    expect(extractiveAnswer('Who pays customs duties?', passage, 1)).toBe('Customs duties are paid by the recipient.');
+    expect(extractiveAnswer('Who pays customs duties?', passage)).not.toContain('#');
+  });
+
+  it('falls back to the opening sentences when nothing overlaps', () => {
+    expect(extractiveAnswer('weather on mars', passage, 1)).toBe('Express shipping has a flat cost of 9 USD.');
   });
 });

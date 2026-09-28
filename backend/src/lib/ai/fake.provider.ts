@@ -41,7 +41,7 @@ export class FakeProvider implements AiProvider {
 
     const top = chunks[0];
     const rawText = JSON.stringify({
-      answer: top ? firstSentences(top.content, 2) : 'I do not know.',
+      answer: top ? extractiveAnswer(query, top.content) : 'I do not know.',
       citedChunkIds: mode === 'cite' ? ['00000000-0000-0000-0000-000000000000:0'] : top ? [top.id] : [],
       confidence: mode === 'lowconf' ? 0.2 : top ? 0.9 : 0,
     });
@@ -49,12 +49,15 @@ export class FakeProvider implements AiProvider {
   }
 }
 
-export function hashEmbed(text: string): number[] {
-  const vec = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
-  const tokens = text
+const contentWords = (text: string) =>
+  text
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter((t) => t.length > 1 && !STOPWORDS.has(t));
+
+export function hashEmbed(text: string): number[] {
+  const vec = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
+  const tokens = contentWords(text);
   for (const token of tokens) {
     const h = fnv1a(token);
     vec[h % EMBEDDING_DIMENSIONS] += (h & 0x80000000) === 0 ? 1 : -1;
@@ -74,7 +77,19 @@ function fnv1a(s: string): number {
 
 const approxTokens = (s: string) => Math.ceil(s.length / 4);
 
-function firstSentences(text: string, n: number): string {
-  const sentences = text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+/g);
-  return (sentences ? sentences.slice(0, n).join(' ') : text.slice(0, 300)).trim();
+/**
+ * A crude extractive "answer": the (up to) two sentences of the passage sharing
+ * the most words with the question, in their original order. Markdown headings
+ * are dropped. Good enough to make offline demos read like real answers.
+ */
+export function extractiveAnswer(query: string, passage: string, max = 2): string {
+  const body = passage.replace(/^\s{0,3}#{1,6}\s.*$/gm, ' ').replace(/\s+/g, ' ').trim();
+  const sentences = (body.match(/[^.!?]+[.!?]+/g) ?? [body.slice(0, 300)]).map((s) => s.trim()).filter(Boolean);
+  const wanted = new Set(contentWords(query));
+  const scored = sentences.map((text, index) => ({ text, index, score: contentWords(text).filter((w) => wanted.has(w)).length }));
+  const best = scored.some((s) => s.score > 0) ? [...scored].sort((a, b) => b.score - a.score || a.index - b.index).slice(0, max) : scored.slice(0, max);
+  return best
+    .sort((a, b) => a.index - b.index)
+    .map((s) => s.text)
+    .join(' ');
 }
