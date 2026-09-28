@@ -15,7 +15,7 @@
     "test:e2e": "jest --config test/jest-e2e.json --runInBand"
   },
   "dependencies": {
-    "@apollo/server": "^4.11.0",
+    "@apollo/server": "^5.5.1",
     "@google/genai": "^2.24.0",
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
