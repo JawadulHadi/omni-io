@@ -1,16 +1,19 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
-    "target": "ES2021",
+    "module": "node16",
+    "moduleResolution": "node16",
+    "target": "ES2022",
+    "lib": ["ES2022"],
     "declaration": false,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "moduleResolution": "node",
+    "useDefineForClassFields": false,
     "esModuleInterop": true,
     "strict": true,
+    "strictPropertyInitialization": false,
     "skipLibCheck": true,
     "outDir": "./dist",
-    "baseUrl": "./src",
     "sourceMap": true
-  }
+  },
+  "include": ["src", "scripts", "test"]
 }
