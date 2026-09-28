@@ -1,0 +1,53 @@
+name: Bug report
+description: Something doesn't work the way the docs say it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Security issues:** please don't file them here — use a [private advisory](https://github.com/JawadulHadi/omni-io/security/advisories/new) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the tier and `decision_note` from the playground or audit log if it's about an answer.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Upload …
+        2. Ask …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Answer ladder, Ingestion, Auth / roles, Tenant isolation, Console, Widget, MCP, Docs, Other]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v1.0.0
+  - type: dropdown
+    id: provider
+    attributes:
+      label: AI provider
+      options: [fake, gemini]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell
