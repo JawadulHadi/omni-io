@@ -4,11 +4,59 @@ All notable changes to Omni.io are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
-### Planned for 1.0.0
+### Planned
 
-- Admin console (playground, documents, ingestion, FAQs, members, widget, audit).
-- Embeddable Shadow-DOM widget and hosted chat page.
-- Documentation set, ADRs, CI and community health files.
+- Tier-mix and latency metrics (OpenTelemetry) with alerting on fallback rate.
+- Per-workspace daily token budgets that force Tier 2 when exhausted.
+- A Redis-backed circuit breaker shared across API instances.
+- A per-workspace evaluation set for tuning confidence and similarity thresholds.
+- MCP OAuth 2.1 authorization.
+- GraphQL codegen for console types.
+- An S3/GCS driver for `BlobStorage`.
+
+## [1.0.0] - 2026-09-29
+
+The first stable release: the admin console, the embeddable widget, documentation and CI on top of the 0.2.0 backend.
+
+### Added
+
+- **Admin console** (React 19, Tailwind v4, shadcn/ui, urql) with route-level code splitting:
+  - Playground: tier badge, citations, decision trace, ladder settings, failure-injection shortcuts.
+  - Documents: drag-and-drop upload, paste, visibility, live progress, retry, GDPR erasure.
+  - Ingestion: live job queue.
+  - FAQs: CRUD.
+  - Members: roles, invitations and removal, with escalation rules mirrored in the UI.
+  - Widget: theme, key rotation, copyable embed snippet, hosted-page link.
+  - Answer audit: filters, tier distribution, token totals, expandable trace.
+  - Sign-in and account creation, including Google.
+- Session handling with the access token in memory, silent refresh through the httpOnly cookie, single-flight refresh within a tab and Web-Locks serialization across tabs, and a workspace switcher.
+- One shared `ingestionProgress` subscription drives live progress across screens.
+- **Embeddable widget**: a standalone IIFE bundle (`dist/widget.js`) rendered in a Shadow DOM, with absolute API URLs and states for loading, rate limiting and a rotated key. It stays invisible if the key is invalid at load.
+- Hosted full-page chat at `/w/:key`.
+- The Omni.io brand mark, wordmarks and favicon.
+- Documentation:
+  - revised architecture spec
+  - resilience-ladder and multi-tenancy deep dives
+  - API reference
+  - deployment guide
+  - eight ADRs
+  - the published v0.1.0 review
+  - release notes
+  - a sample knowledge base
+- Project health files: CI workflow, Dependabot, issue and PR templates, CODEOWNERS, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.editorconfig`, `.gitattributes`, `.nvmrc`.
+
+### Fixed
+
+- Chunk starts are now aligned to word boundaries; overlap previously began mid-word.
+- PDF text is joined page by page, without the `-- 1 of N --` markers that leaked into citations.
+- The fake provider now returns the passage sentences most related to the question, with markdown headings removed, instead of the chunk's first sentences.
+- The widget bundle is emitted as ASCII, so `×` and `…` render correctly on pages without a UTF-8 charset.
+- The Vite dev proxy no longer captures the console's `/widget` route (regex proxy keys).
+- The console no longer triggers a React "setState while rendering another component" warning from two routes sharing one urql operation.
+
+### Changed
+
+- Node 22 LTS is the recommended runtime (`.nvmrc`); Node 20.16+ remains supported.
 
 ## [0.2.0] - 2026-09-29
 
@@ -95,6 +143,7 @@ The hardened backend. The scaffold now builds, migrates and boots, tenant isolat
 
 - It does not build, migrate or boot; RLS is not enforced; every question returns HTTP 500. See [the scaffold review](https://github.com/JawadulHadi/omni-io/blob/main/docs/reviews/2026-09-29-scaffold-review.md).
 
-[Unreleased]: https://github.com/JawadulHadi/omni-io/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/JawadulHadi/omni-io/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/JawadulHadi/omni-io/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/JawadulHadi/omni-io/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/JawadulHadi/omni-io/releases/tag/v0.1.0

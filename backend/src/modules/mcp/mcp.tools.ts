@@ -32,7 +32,7 @@ export class McpToolsService {
   ) {}
 
   createServer(user: AuthUser): McpServer {
-    const server = new McpServer({ name: 'omniio', version: '0.2.0' });
+    const server = new McpServer({ name: 'omniio', version: '1.0.0' });
     const workspaceId = z.string().uuid().describe('Workspace id from list_workspaces');
 
     server.registerTool(
