@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Omni.io">
+  <title>Omni.io</title>
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <!-- Three rungs, widest first: the ladder degrades gracefully instead of failing. -->
+  <rect x="14" y="17" width="36" height="8" rx="4" fill="#10b981"/>
+  <rect x="14" y="28" width="26" height="8" rx="4" fill="#f59e0b"/>
+  <rect x="14" y="39" width="16" height="8" rx="4" fill="#f43f5e"/>
+</svg>
