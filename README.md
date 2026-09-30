@@ -157,8 +157,10 @@ Contributions are welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md). Rep
 Released under the [MIT License](LICENSE).
 
 ---
-
-<p align="center">
-  Built by <a href="https://github.com/JawadulHadi">Jawad Ul Hadi</a> — backend engineering with NestJS and generative AI ·
-  <a href="https://www.linkedin.com/in/jawad-ul-hadi">LinkedIn</a>
+<p align="center" style="font-family: system-ui, sans-serif; color: #333; line-height: 1.6;">
+  Built by <strong>Jawad Ul Hadi</strong> | Backend Lead &amp; Architect — AI-First Systems Design &amp; Generative AI · 
+  <a href="https://gravatar.com/juhbukhari" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: none; font-weight: 500;">Let's Connect</a>
 </p>
+
+
+
