@@ -1,7 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
-import { extname } from 'node:path';
+import { extname, join } from 'node:path';
+import { Worker } from 'node:worker_threads';
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+const PDF_TIMEOUT_MS = 30_000;
+const PDF_HEAP_MB = 512;
+const MAX_PARALLEL_PDFS = 2;
+const UNREADABLE = 'Could not read that PDF (it may be encrypted or corrupted)';
 
 const TYPES: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -24,18 +30,51 @@ export function detectMimeType(originalName: string, data: Buffer): string {
 }
 
 export async function extractText(data: Buffer, mime: string): Promise<string> {
-  if (mime !== 'application/pdf') return data.toString('utf8').replace(/^﻿/, '');
+  if (mime !== 'application/pdf') return data.toString('utf8').replace(/^\uFEFF/, '');
+  return withSlot(() => extractPdf(data));
+}
 
-  // pdf-parse is ESM-first; a real dynamic import keeps it out of the startup path.
-  const { PDFParse } = await import('pdf-parse');
-  const parser = new PDFParse({ data: new Uint8Array(data) });
+/**
+ * PDF parsing is CPU-heavy and runs on untrusted input, so it gets its own
+ * thread with a time limit and a heap cap, and at most two run at once per
+ * process. Any failure — corrupt file, timeout, out of memory — is a 400.
+ */
+function extractPdf(data: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(join(__dirname, 'pdf-extract.worker.js'), {
+      workerData: new Uint8Array(data), // a copy: the upload buffer may share a pooled ArrayBuffer
+      resourceLimits: { maxOldGenerationSizeMb: PDF_HEAP_MB },
+    });
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      fn();
+    };
+    const timer = setTimeout(
+      () => settle(() => reject(new BadRequestException(`That PDF took longer than ${PDF_TIMEOUT_MS / 1000}s to read`))),
+      PDF_TIMEOUT_MS,
+    );
+    worker.once('message', (m: { ok: boolean; text?: string }) =>
+      settle(() => (m.ok ? resolve(m.text ?? '') : reject(new BadRequestException(UNREADABLE)))),
+    );
+    worker.once('error', () => settle(() => reject(new BadRequestException(UNREADABLE))));
+    worker.once('exit', () => settle(() => reject(new BadRequestException(UNREADABLE))));
+  });
+}
+
+let running = 0;
+const waiting: (() => void)[] = [];
+
+async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (running >= MAX_PARALLEL_PDFS) await new Promise<void>((resolve) => waiting.push(resolve));
+  running++;
   try {
-    // Join pages ourselves: the default output interleaves "-- 1 of N --" markers,
-    // which would end up inside chunks and citations.
-    return (await parser.getText()).pages.map((p) => p.text.trim()).join('\n\n');
-  } catch {
-    throw new BadRequestException('Could not read that PDF (it may be encrypted or corrupted)');
+    return await fn();
   } finally {
-    await parser.destroy().catch(() => undefined);
+    running--;
+    waiting.shift()?.();
   }
 }

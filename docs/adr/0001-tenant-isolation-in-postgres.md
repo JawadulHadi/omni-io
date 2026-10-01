@@ -15,7 +15,7 @@ The v0.1.0 scaffold declared RLS policies, but they never applied, for two reaso
 
 - Every tenant-owned table has RLS, with a `USING` + `WITH CHECK` policy on `nullif(current_setting('app.workspace_id', true), '')::uuid`.
 - The API and worker connect as `omniio_app` (`NOSUPERUSER`, `NOBYPASSRLS`, not the owner). Migrations run as the owner.
-- RLS is enabled, not forced. The only cross-tenant access is four narrow `SECURITY DEFINER` functions, each with a pinned `search_path`, for lookups that happen before a tenant is known.
+- RLS is enabled, not forced. The only cross-tenant access is a handful of narrow `SECURITY DEFINER` functions, each with a pinned `search_path`, for lookups that happen before a tenant is known.
 
 ## Consequences
 

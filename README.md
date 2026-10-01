@@ -16,8 +16,8 @@
   <a href="https://github.com/JawadulHadi/omni-io/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/JawadulHadi/omni-io/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/JawadulHadi/omni-io/releases"><img alt="Release" src="https://img.shields.io/github/v/release/JawadulHadi/omni-io?sort=semver&color=10b981"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0f172a"></a>
-  <img alt="Node 22 LTS" src="https://img.shields.io/badge/node-22_LTS-339933?logo=nodedotjs&logoColor=white">
-  <img alt="NestJS" src="https://img.shields.io/badge/NestJS-10-E0234E?logo=nestjs&logoColor=white">
+  <img alt="Node 24 LTS" src="https://img.shields.io/badge/node-24_LTS-339933?logo=nodedotjs&logoColor=white">
+  <img alt="NestJS" src="https://img.shields.io/badge/NestJS-12-E0234E?logo=nestjs&logoColor=white">
   <img alt="PostgreSQL + pgvector" src="https://img.shields.io/badge/PostgreSQL-16_%2B_pgvector-4169E1?logo=postgresql&logoColor=white">
   <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white">
   <img alt="Gemini" src="https://img.shields.io/badge/Gemini-3.5-8E75B2?logo=googlegemini&logoColor=white">
@@ -44,21 +44,22 @@ Omni.io is built the other way round:
 | | |
 | --- | --- |
 | **Resilience ladder** | Schema-validated model output, citation ⊆ retrieved checks, per-workspace confidence and similarity thresholds, a hard timeout and a circuit breaker. [How it works →](docs/resilience-ladder.md) |
-| **Tenant isolation** | A non-owner `NOBYPASSRLS` app role, one short transaction per unit of work, `nullif`-safe policies, and four narrow `SECURITY DEFINER` lookups. [Deep dive →](docs/multi-tenancy.md) |
-| **Ingestion** | PDF, TXT and Markdown up to 20 MB, processed by a separate worker: word-aligned chunks, batched embeddings, idempotent upserts, retries with backoff, live progress. |
+| **Tenant isolation** | A non-owner `NOBYPASSRLS` app role, one short transaction per unit of work, `nullif`-safe policies, and a few narrow `SECURITY DEFINER` functions. [Deep dive →](docs/multi-tenancy.md) |
+| **Ingestion** | PDF, TXT and Markdown up to 20 MB. PDFs are parsed in an isolated thread with a time limit and a memory cap. A separate worker does the rest: word-aligned chunks, batched embeddings, idempotent upserts, retries with backoff, live progress. |
 | **Admin console** | Playground with decision trace, documents, ingestion queue, FAQs, members and roles, widget settings, and an answer audit with tier distribution. Light and dark themes. |
-| **Embeddable widget** | One `<script>` tag. It renders in a Shadow DOM and answers only from documents marked public. Rate-limited per IP and per workspace, with a rotatable key. |
-| **Auth** | 15-minute access tokens, rotating refresh tokens with theft detection, live role checks, Google sign-in (PKCE). |
-| **MCP server** | `list_workspaces`, `list_documents`, `list_faqs`, `ask_question` over Streamable HTTP, scoped to the caller's own permissions. |
-| **GDPR erasure** | Deletes a document's vectors, original file and audit references; ingestion jobs carry ids only. |
+| **Embeddable widget** | One `<script>` tag. It renders in a Shadow DOM and answers only from documents and FAQs marked public. Rate-limited per IP and per workspace, with a rotatable key. If Postgres is down, visitors still get the hand-off message. |
+| **Auth** | 15-minute access tokens, rotating refresh tokens with theft detection, and live role checks. Single-use invite links, with optional invite-only sign-up. Google sign-in (PKCE) that never links to an existing password account by email. |
+| **MCP server** | `list_workspaces`, `list_documents`, `list_faqs`, `ask_question` over Streamable HTTP, scoped to the caller's own permissions. Clients authenticate with revocable personal access tokens. |
+| **Cost ceilings** | A daily model-call budget per workspace (Tier 2 after it, not errors), plus limits on questions per user, uploads per workspace and workspaces per user. |
+| **Privacy** | GDPR erasure deletes a document's vectors, any stored original and its audit references. Ingestion jobs carry ids only. Customer questions are deleted after `ANSWER_RETENTION_DAYS` (default 90). |
 
 ## The resilience ladder
 
 | What goes wrong | The customer gets |
 | --- | --- |
 | Nothing | **Tier 1**: a model answer citing verified passages |
-| The model errors, times out, returns invalid JSON, cites a passage it wasn't given, or isn't confident enough | **Tier 2**: the top ≤3 relevant excerpts, verbatim |
-| Nothing relevant is found, or the embedding API or vector search is down | **Tier 3**: a keyword-matched FAQ, or a human hand-off message |
+| The model errors, times out, returns invalid JSON, cites a passage it wasn't given, writes an answer its citations don't support, or isn't confident enough; or the workspace's daily budget is spent | **Tier 2**: the top ≤3 relevant excerpts, verbatim |
+| Nothing relevant is found, or the embedding API or vector search is down or hangs | **Tier 3**: a keyword-matched FAQ, or a human hand-off message |
 | The audit write fails | The same answer; the failure is only logged |
 
 The reason for every outcome is recorded (`tier1_timeout`, `tier1_invalid_citation`, `retrieval_failed`, …). With the offline fake provider you can force each failure from the playground: `[fail:error]`, `[fail:timeout]`, `[fail:json]`, `[fail:lowconf]`, `[fail:cite]`.
@@ -88,18 +89,18 @@ flowchart LR
 
 | Layer | Stack |
 | --- | --- |
-| API | NestJS 10, GraphQL (Apollo, code-first), REST, MCP SDK, zod, class-validator |
+| API | NestJS 12, GraphQL (Apollo 5, code-first), REST, MCP SDK, zod, class-validator |
 | Data | PostgreSQL 16, pgvector 0.8 (HNSW with iterative scan), row-level security, plain SQL migrations |
-| Jobs | BullMQ on Redis 7, in a separate worker process |
+| Jobs | BullMQ 6 on Redis 7, in a separate worker process |
 | AI | Google Gemini (`gemini-3.5-flash`, `gemini-embedding-2` at 768 dimensions) behind a provider interface, plus a deterministic fake |
-| Console | React 19, Vite, Tailwind CSS v4, shadcn/ui, urql, graphql-ws |
+| Console | React 19, Vite 8, React Router 7, Tailwind CSS v4, shadcn/ui, urql, graphql-ws |
 | Widget | A standalone React IIFE bundle in a Shadow DOM, ~72 kB gzipped |
 
 The full design and its trade-offs: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**, and the [architecture decision records](docs/adr/).
 
 ## Quick start
 
-Requires Node 22 LTS (20.16+ works) and Docker.
+Requires Node 24 LTS and Docker. The app itself runs on Node 22.12+; the unit tests need 24.9+.
 
 ```sh
 git clone https://github.com/JawadulHadi/omni-io.git && cd omni-io
@@ -121,17 +122,29 @@ Upload the files in [`samples/`](samples/) and try the questions listed there.
 
 For real answers, set `AI_PROVIDER=gemini` and `GEMINI_API_KEY` in `backend/.env`, and set the similarity floor back to 0.6 under Playground → Ladder settings. The seed lowers it to 0.1 for the fake provider's bag-of-words vectors.
 
+## Deploy
+
+One server with Docker Compose: Postgres + pgvector, Redis, the API, the worker, and Caddy with automatic HTTPS.
+
+```sh
+cd deploy
+cp .env.example .env               # DOMAIN, two DB passwords, JWT_SECRET, GEMINI_API_KEY
+docker compose up -d --build       # migrations run first; then https://<DOMAIN>
+```
+
+Container platforms and managed databases, the configuration checklist and operations: **[docs/deployment.md](docs/deployment.md)**.
+
 ## Testing
 
 ```sh
 cd backend
-npm test            # 60 unit tests: every ladder branch, breaker, chunking, crypto, auth, prompt hygiene
-npm run test:e2e    # 9 row-level-security tests against the real Postgres, as omniio_app
+npm test            # 70 unit tests: every ladder branch, breakers, grounding, chunking, auth guard, prompt hygiene
+npm run test:e2e    # 16 tests against the real Postgres, as omniio_app: RLS, invite links, vector-search fallback, retention
 cd ../frontend
 npm run build       # typecheck + console + standalone widget.js
 ```
 
-CI runs all of this on every push, against `pgvector/pgvector:pg16`.
+CI runs all of this on every push, against `pgvector/pgvector:pg16`, and builds both production images.
 
 ## Documentation
 
@@ -141,14 +154,14 @@ CI runs all of this on every push, against `pgvector/pgvector:pg16`.
 | [Resilience ladder](docs/resilience-ladder.md) | Tiers, gates, decision notes, trace format, failure injection |
 | [Multi-tenancy](docs/multi-tenancy.md) | How RLS is made real, roles, definer functions, the new-table checklist |
 | [API reference](docs/api.md) | REST, GraphQL operations and roles, MCP tools, rate limits |
-| [Deployment](docs/deployment.md) | Topology, database roles, configuration checklist, hosting the widget |
+| [Deployment](docs/deployment.md) | One-command Docker Compose deploy, topology, database roles, configuration checklist, operations |
 | [ADRs](docs/adr/) | Eight architecture decision records |
 | [Scaffold review](docs/reviews/2026-09-29-scaffold-review.md) | The 47 findings that took v0.1.0 to v1.0.0 |
 | [Changelog](CHANGELOG.md) | Every release, following Keep a Changelog |
 
 ## Roadmap
 
-Tier-mix metrics and alerting · per-workspace token budgets · a shared circuit breaker · an evaluation set for threshold tuning · MCP OAuth 2.1 · an S3 storage driver. See [Unreleased](CHANGELOG.md#unreleased).
+Tier-mix metrics and alerting · a shared circuit breaker · an evaluation set for threshold tuning · MCP OAuth 2.1 · email verification · an S3 storage driver. See [Unreleased](CHANGELOG.md#unreleased).
 
 ## Contributing, security, license
 

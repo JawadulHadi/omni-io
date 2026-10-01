@@ -28,7 +28,7 @@ export class GoogleOAuthService {
   }
 
   /** Returns the redirect URL plus the value to store in the short-lived state cookie. */
-  begin(): { url: string; cookie: string } {
+  begin(inviteToken?: string): { url: string; cookie: string } {
     const env = this.requireEnabled();
     const state = randomBytes(16).toString('base64url');
     const verifier = randomBytes(32).toString('base64url');
@@ -43,12 +43,16 @@ export class GoogleOAuthService {
       code_challenge_method: 'S256',
       prompt: 'select_account',
     });
-    return { url: `${AUTH_URL}?${params}`, cookie: `${state}.${verifier}` };
+    return { url: `${AUTH_URL}?${params}`, cookie: [state, verifier, inviteToken ?? ''].join('.') };
   }
 
-  async complete(code: string | undefined, state: string | undefined, cookie: string | undefined): Promise<GoogleProfile> {
+  async complete(
+    code: string | undefined,
+    state: string | undefined,
+    cookie: string | undefined,
+  ): Promise<{ profile: GoogleProfile; inviteToken?: string }> {
     const env = this.requireEnabled();
-    const [expectedState, verifier] = (cookie ?? '').split('.');
+    const [expectedState, verifier, inviteToken] = (cookie ?? '').split('.');
     if (!code || !state || !expectedState || state !== expectedState || !verifier) {
       throw new UnauthorizedException('Google sign-in failed: state mismatch — please try again');
     }
@@ -75,10 +79,13 @@ export class GoogleOAuthService {
       throw new UnauthorizedException('Google sign-in failed: unexpected ID token');
     }
     return {
-      sub: claims.sub,
-      email: claims.email,
-      emailVerified: claims.email_verified === true,
-      name: typeof claims.name === 'string' ? claims.name : undefined,
+      profile: {
+        sub: claims.sub,
+        email: claims.email,
+        emailVerified: claims.email_verified === true,
+        name: typeof claims.name === 'string' ? claims.name : undefined,
+      },
+      inviteToken: inviteToken || undefined,
     };
   }
 

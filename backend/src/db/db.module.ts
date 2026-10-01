@@ -12,7 +12,13 @@ import { TenantContext } from './tenant-context';
       provide: PG_POOL,
       inject: [ConfigService],
       useFactory: (cfg: ConfigService<Env, true>) => {
-        const pool = new Pool({ connectionString: cfg.get('DATABASE_URL', { infer: true }), max: 20 });
+        // A server-side statement timeout, so a query abandoned by a request timeout can't pin a connection.
+        const pool = new Pool({
+          connectionString: cfg.get('DATABASE_URL', { infer: true }),
+          max: 20,
+          connectionTimeoutMillis: 5_000,
+          statement_timeout: cfg.get('DB_STATEMENT_TIMEOUT_MS', { infer: true }),
+        });
         const logger = new Logger('PgPool');
         pool.on('error', (err) => logger.error(`Idle client error: ${err.message}`));
         return pool;

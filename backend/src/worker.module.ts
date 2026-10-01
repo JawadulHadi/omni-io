@@ -8,6 +8,7 @@ import { StorageModule } from './lib/storage/blob-storage';
 import { ChunksRepository } from './modules/ingestion/chunks.repository';
 import { INGESTION_JOB_OPTIONS, INGESTION_QUEUE } from './modules/ingestion/ingestion.constants';
 import { IngestionProcessor } from './modules/ingestion/ingestion.processor';
+import { RetentionScheduler } from './modules/ingestion/retention.scheduler';
 
 /** The ingestion worker: no HTTP server, no GraphQL — just the queue consumer and what it needs. */
 @Module({
@@ -22,6 +23,6 @@ import { IngestionProcessor } from './modules/ingestion/ingestion.processor';
     }),
     BullModule.registerQueue({ name: INGESTION_QUEUE, defaultJobOptions: INGESTION_JOB_OPTIONS }),
   ],
-  providers: [IngestionProcessor, ChunksRepository],
+  providers: [IngestionProcessor, ChunksRepository, RetentionScheduler],
 })
 export class WorkerModule {}

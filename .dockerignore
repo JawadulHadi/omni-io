@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/dist-worker
+**/coverage
+backend/storage
+**/.env
+**/.env.*
+!**/.env.example
+.git
+docs
+samples

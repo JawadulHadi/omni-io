@@ -6,6 +6,10 @@ export const IS_PUBLIC_KEY = 'isPublic';
 /** Skips AuthGuard. Used only by login/refresh, the widget, and health. */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
+export const ALLOW_API_TOKEN_KEY = 'allowApiToken';
+/** Also accept a personal access token (omni_pat_…). Only for handlers that check membership per call. */
+export const AllowApiToken = () => SetMetadata(ALLOW_API_TOKEN_KEY, true);
+
 export const MIN_ROLE_KEY = 'minRole';
 /**
  * Minimum role required (owner > admin > editor > viewer), checked against

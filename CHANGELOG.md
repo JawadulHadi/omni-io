@@ -4,12 +4,64 @@ All notable changes to Omni.io are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+Deployment hardening. The build is green again on the upgraded dependencies, and the stack deploys with one command.
+
+### Fixed
+
+- **The build.** The dependency upgrades merged after 1.0.0 had broken install, typecheck, build and tests on `main`:
+  - Nest 12 is ESM-only. The backend now compiles with `module: NodeNext` and loads it through `require(esm)`; Jest runs with `--experimental-vm-modules`.
+  - TypeScript 7 ships no compiler API, so the toolchain is on TypeScript 6.
+  - `@nest-lab/throttler-storage-redis` doesn't support Nest 12 and is replaced by our own Redis storage.
+  - Apollo 5 needs `@as-integrations/express5`.
+  - React Router 7 dropped the `future` prop.
+  - Vite 8 ignores esbuild's `charset: 'ascii'`, so the widget bundle is now escaped after the build.
+  - The frontend lockfile is back in sync.
+- **Google sign-in could take over accounts.** It linked a Google identity to any existing password account with the same email. Because sign-up doesn't verify email ownership, whoever registered the address first kept the password to the real owner's account. It now refuses, and the console points the user to password sign-in.
+- **Anonymous widget visitors could get internal FAQ answers** from Tier 3. FAQs now have a visibility setting; existing FAQs stay public and new ones start internal.
+- **The question embedding had no timeout**, so a hanging embedding API hung every question. Retrieval now has its own time budget and circuit breaker, and degrades to Tier 3.
+- **The half-open circuit breaker let every concurrent request through.** It now lets exactly one probe through.
+- **Postgres down made the widget return 500s.** It now answers with the hand-off message (and default theme).
+- **Redis down made widget and auth requests hang or fail** in the rate limiter. Limits now fall back to per-process counters.
+- **Uploads with Redis down hung on BullMQ** and left the document pending forever. They are now saved as `failed` with a Retry button.
+- **PDF parsing ran on the API's event loop.** It now runs in a worker thread with a 30-second limit, a 512 MB heap cap and at most two at a time.
+- **Small tenants could get fewer than k vector-search results in a large shared table** once HNSW's iterative scan hit `hnsw.max_scan_tuples`. `match_chunks` now falls back to an exact search for that tenant.
+- **Removed members kept receiving live ingestion events** until their socket closed. Membership is now re-checked as events arrive.
+- **Erasure could silently leave originals behind.** Original uploads were stored on local disk, never read back, and deleted with `force: true`, so in a multi-host setup a delete could miss them and report success. Originals are no longer kept by default (`STORAGE_DRIVER=none`).
+
+### Added
+
+- **Invite links.** `inviteMember`, which added any registered account without consent and revealed whether an email had an account, is replaced by `createInvitation`. It makes single-use links valid for 7 days that the invitee accepts at `/invite/<token>`. New `invitations`, `revokeInvitation` and `acceptInvitation` operations, and invite-aware register, login and Google sign-in.
+- **Personal access tokens for MCP** (`omni_pat_…`), managed under **API tokens** in the console. They are accepted only on `/mcp`.
+- **Cost ceilings**, so spend can no longer grow without limit:
+  - `TIER1_DAILY_LIMIT_PER_WORKSPACE`: when it runs out, answers come from Tier 2 (`tier1_budget_exhausted`).
+  - `ASK_LIMIT_PER_USER` for the console and MCP.
+  - `INGEST_LIMIT_PER_WORKSPACE`.
+  - `MAX_WORKSPACES_PER_USER`.
+  - `ALLOW_SIGNUP=false` for invite-only sign-up.
+- **A grounding check on Tier 1.** At least `TIER1_MIN_GROUNDING` of the answer's content words must appear in its cited passages (`tier1_ungrounded`).
+- **Answer-audit retention** (`ANSWER_RETENTION_DAYS`, default 90). The worker sweeps every six hours, and also removes expired invitations and tokens.
+- `/health` reports Postgres and Redis separately: 200 `degraded` without Redis, 503 without Postgres.
+- A server-side `statement_timeout` (`DB_STATEMENT_TIMEOUT_MS`).
+- The API refuses to start in production with `COOKIE_SECURE=false` or the example `JWT_SECRET`.
+- **Deployment:** `deploy/` has a backend image (API, worker, migrations), a Caddy web image (console plus same-origin API proxy with automatic HTTPS) and a Docker Compose file for one server. CI now builds both images.
+- Migration `0004_hardening.sql`, with integration tests for invitations, the vector-search fallback and retention.
+
+### Changed
+
+- Node 24 LTS (`.nvmrc`). The app needs 22.12 or later.
+- The migration runner moved to `src/migrate.ts`, so production images run it as `node dist/migrate.js`.
+- Dependabot no longer proposes major upgrades. They need a deliberate migration.
+
+### Removed
+
+- `ConnectionsService`, `APP_USER_CONNECTION_KEY_SECRET` and the `app_user_connections` table. Nothing ever used them.
+
 ### Planned
 
 - Tier-mix and latency metrics (OpenTelemetry) with alerting on fallback rate.
-- Per-workspace daily token budgets that force Tier 2 when exhausted.
 - A Redis-backed circuit breaker shared across API instances.
 - A per-workspace evaluation set for tuning confidence and similarity thresholds.
+- Email verification, so invitations and Google sign-in can be bound to an address.
 - MCP OAuth 2.1 authorization.
 - GraphQL codegen for console types.
 - An S3/GCS driver for `BlobStorage`.

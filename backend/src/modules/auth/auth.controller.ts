@@ -1,11 +1,12 @@
-import { Body, Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, HttpCode, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import type { Env } from '../../config/env';
 import { Public } from '../../common/decorators/auth.decorators';
+import { INVITE_TOKEN_PATTERN } from '../workspaces/workspaces.models';
 import { LoginDto, RegisterDto, SwitchWorkspaceDto } from './auth.dto';
-import { AuthService, REFRESH_TTL_DAYS, Session } from './auth.service';
+import { AuthService, GoogleAccountExistsException, REFRESH_TTL_DAYS, Session } from './auth.service';
 import { GoogleOAuthService } from './google-oauth.service';
 
 const REFRESH_COOKIE = 'omniio_rt';
@@ -30,7 +31,7 @@ export class AuthController {
   @Get('providers')
   @SkipThrottle()
   providers() {
-    return { password: true, google: this.google.enabled };
+    return { password: true, google: this.google.enabled, signup: this.auth.signupOpen };
   }
 
   @Post('register')
@@ -41,7 +42,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(200)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
-    return this.respond(res, await this.auth.login(dto.email, dto.password, dto.workspaceId));
+    return this.respond(res, await this.auth.login(dto.email, dto.password, dto.workspaceId, dto.inviteToken));
   }
 
   @Post('refresh')
@@ -69,8 +70,9 @@ export class AuthController {
   }
 
   @Get('google')
-  googleStart(@Res() res: Response) {
-    const { url, cookie } = this.google.begin();
+  googleStart(@Query('invite') invite: string | undefined, @Res() res: Response) {
+    // An invite link survives the round trip to Google inside the state cookie.
+    const { url, cookie } = this.google.begin(invite && INVITE_TOKEN_PATTERN.test(invite) ? invite : undefined);
     res.cookie(STATE_COOKIE, cookie, {
       httpOnly: true,
       secure: this.secure,
@@ -91,11 +93,13 @@ export class AuthController {
     res.clearCookie(STATE_COOKIE, { path: '/auth/google' });
     const origin = this.cfg.get('CONSOLE_ORIGIN', { infer: true }).split(',')[0];
     try {
-      const profile = await this.google.complete(code, state, req.cookies?.[STATE_COOKIE]);
-      this.respond(res, await this.auth.loginWithGoogle(profile));
-      res.redirect(`${origin}/?signin=google`);
-    } catch {
-      res.redirect(`${origin}/login?error=google`);
+      const { profile, inviteToken } = await this.google.complete(code, state, req.cookies?.[STATE_COOKIE]);
+      const session = await this.auth.loginWithGoogle(profile, inviteToken);
+      this.respond(res, session);
+      res.redirect(`${origin}/?signin=google${session.invitation ? `&invitation=${session.invitation}` : ''}`);
+    } catch (err) {
+      const reason = err instanceof GoogleAccountExistsException ? 'google_exists' : err instanceof ForbiddenException ? 'signup_closed' : 'google';
+      res.redirect(`${origin}/login?error=${reason}`);
     }
   }
 
@@ -112,6 +116,7 @@ export class AuthController {
       expiresIn: session.expiresIn,
       workspaceId: session.workspaceId,
       role: session.role,
+      invitation: session.invitation,
     };
   }
 

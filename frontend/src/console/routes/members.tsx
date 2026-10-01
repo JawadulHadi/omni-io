@@ -1,15 +1,25 @@
-import { UserMinus, Users } from 'lucide-react';
+import { Link2, UserMinus, Users, X } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from 'urql';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CopyField } from '@/components/ui/copy-field';
 import { Alert, EmptyState, PageHeader, Skeleton } from '@/components/ui/feedback';
 import { Field, Input, Select } from '@/components/ui/form-controls';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { gqlErrorMessage } from '@/lib/api';
 import { ROLE_RANK, useSession, type Role } from '@/lib/auth';
-import { INVITE_MEMBER, MEMBERS_QUERY, REMOVE_MEMBER, UPDATE_MEMBER_ROLE, type Member } from '@/lib/gql';
+import {
+  CREATE_INVITATION,
+  INVITATIONS_QUERY,
+  MEMBERS_QUERY,
+  REMOVE_MEMBER,
+  REVOKE_INVITATION,
+  UPDATE_MEMBER_ROLE,
+  type Invitation,
+  type Member,
+} from '@/lib/gql';
 import { relativeTime } from '@/lib/utils';
 
 const ROLES: Role[] = ['viewer', 'editor', 'admin', 'owner'];
@@ -46,6 +56,7 @@ export default function MembersPage() {
     <>
       <PageHeader title="Members" description="Roles are checked against this list on every request — changes apply immediately, not at next sign-in." />
       {isAdmin && <InviteCard grantable={grantable} />}
+      {isAdmin && <PendingInvitations />}
       {error && <Alert variant="destructive" title="Could not load members">{gqlErrorMessage(error)}</Alert>}
       {actionError && <Alert variant="destructive">{actionError}</Alert>}
       <Card>
@@ -112,30 +123,35 @@ export default function MembersPage() {
 }
 
 function InviteCard({ grantable }: { grantable: Role[] }) {
-  const [{ fetching }, invite] = useMutation(INVITE_MEMBER);
+  const [{ fetching }, create] = useMutation(CREATE_INVITATION);
   const [role, setRole] = useState<Role>('viewer');
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formEl = e.currentTarget;
-    const email = String(new FormData(formEl).get('email'));
-    const res = await invite({ input: { email, role } });
-    if (res.error) return setMessage({ ok: false, text: gqlErrorMessage(res.error)! });
-    setMessage({ ok: true, text: `${email} added as ${role}.` });
+    const label = String(new FormData(formEl).get('label') ?? '').trim();
+    const res = await create({ input: { role, label: label || null } }, { additionalTypenames: ['Invitation'] });
+    if (res.error) return setError(gqlErrorMessage(res.error));
+    setError(null);
+    setLink(`${window.location.origin}/invite/${res.data.createInvitation.token}`);
     formEl.reset();
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Add a member</CardTitle>
-        <CardDescription>They need an Omni.io account first. You can grant any role up to your own.</CardDescription>
+        <CardTitle className="text-base">Invite someone</CardTitle>
+        <CardDescription>
+          Creates a single-use link, valid for 7 days. Send it to them yourself; they join once they open it and sign in or create an account. You can grant any role
+          up to your own.
+        </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="grid gap-4">
         <form className="grid gap-3 sm:grid-cols-[1fr_180px_auto] sm:items-end" onSubmit={onSubmit}>
-          <Field label="Email" htmlFor="invite-email">
-            <Input id="invite-email" name="email" type="email" required />
+          <Field label="For (optional)" htmlFor="invite-label" hint="A name or email, so you can tell pending links apart.">
+            <Input id="invite-label" name="label" maxLength={200} placeholder="sam@example.com" />
           </Field>
           <Field label="Role" htmlFor="invite-role" hint={ROLE_HELP[role]}>
             <Select id="invite-role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
@@ -147,10 +163,72 @@ function InviteCard({ grantable }: { grantable: Role[] }) {
             </Select>
           </Field>
           <Button type="submit" disabled={fetching} className="sm:mb-5">
-            Add member
+            <Link2 aria-hidden /> Create link
           </Button>
         </form>
-        {message && <p className={`mt-3 text-sm ${message.ok ? 'text-muted-foreground' : 'text-destructive'}`}>{message.text}</p>}
+        {error && <Alert variant="destructive">{error}</Alert>}
+        {link && (
+          <div className="grid gap-1.5">
+            <p className="text-sm font-medium">Invite link — shown once, copy it now</p>
+            <CopyField value={link} label="Invite link" />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PendingInvitations() {
+  const context = useMemo(() => ({ additionalTypenames: ['Invitation'] }), []);
+  const [{ data }] = useQuery<{ invitations: Invitation[] }>({ query: INVITATIONS_QUERY, context });
+  const [, revoke] = useMutation(REVOKE_INVITATION);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!data?.invitations.length) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Pending invitations</CardTitle>
+        <CardDescription>Links that haven't been used yet. Revoking one stops it working immediately.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {error && <Alert variant="destructive">{error}</Alert>}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>For</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Expires</TableHead>
+              <TableHead className="sr-only">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.invitations.map((inv) => (
+              <TableRow key={inv.id}>
+                <TableCell>{inv.label ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                <TableCell>
+                  <Badge variant="secondary" className="capitalize">
+                    {inv.role}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground">{new Date(inv.expiresAt).toLocaleDateString()}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Revoke invitation${inv.label ? ` for ${inv.label}` : ''}`}
+                    onClick={async () => {
+                      const res = await revoke({ id: inv.id }, { additionalTypenames: ['Invitation'] });
+                      setError(res.error ? gqlErrorMessage(res.error) : null);
+                    }}
+                  >
+                    <X />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );

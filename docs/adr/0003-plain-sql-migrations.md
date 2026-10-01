@@ -15,7 +15,7 @@ An ORM either can't express these or hides them. The scaffold's `drizzle-kit pus
 
 ## Decision
 
-- Migrations are forward-only `.sql` files in `backend/migrations/`, applied in order by a ~60-line runner (`scripts/migrate.ts`). Each file runs in one transaction, is recorded in `schema_migrations`, and is serialized with an advisory lock.
+- Migrations are forward-only `.sql` files in `backend/migrations/`, applied in order by a ~60-line runner (`src/migrate.ts`, compiled with the app so a production image runs it as `node dist/migrate.js`). Each file runs in one transaction, is recorded in `schema_migrations`, and is serialized with an advisory lock.
 - Queries use `pg` directly through `DbService`, with parameterized SQL.
 
 ## Consequences

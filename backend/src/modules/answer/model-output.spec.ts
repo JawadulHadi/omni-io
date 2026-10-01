@@ -1,4 +1,4 @@
-import { parseModelAnswer } from './model-output';
+import { groundingScore, parseModelAnswer } from './model-output';
 
 describe('parseModelAnswer', () => {
   const valid = { answer: 'Five days.', citedChunkIds: ['d:0'], confidence: 0.8 };
@@ -19,5 +19,21 @@ describe('parseModelAnswer', () => {
     ['empty answer', JSON.stringify({ ...valid, answer: '   ' })],
   ])('rejects %s', (_label, raw) => {
     expect(parseModelAnswer(raw).ok).toBe(false);
+  });
+});
+
+describe('groundingScore', () => {
+  const passage = 'Refunds are issued within 5 business days after we receive the returned item.';
+
+  it('scores an answer built from its passage highly, folding plurals', () => {
+    expect(groundingScore('A refund is issued within 5 business days of receiving the item.', [passage])).toBeGreaterThan(0.6);
+  });
+
+  it('scores an answer the passage never supports near zero', () => {
+    expect(groundingScore('Shipping to Canada costs twelve dollars per parcel.', [passage])).toBeLessThan(0.2);
+  });
+
+  it('treats an answer with no content words as grounded', () => {
+    expect(groundingScore('OK, so it is.', [passage])).toBe(1);
   });
 });

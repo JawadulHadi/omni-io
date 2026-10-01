@@ -1,4 +1,4 @@
-import { AppWindow, FileText, ListChecks, Loader2, LogOut, MessageSquareText, ScrollText, Users, Workflow } from 'lucide-react';
+import { AppWindow, FileText, KeyRound, ListChecks, Loader2, LogOut, MessageSquareText, ScrollText, Users, Workflow } from 'lucide-react';
 import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from 'urql';
@@ -20,6 +20,7 @@ const NAV = [
   { to: '/members', label: 'Members', icon: Users },
   { to: '/widget', label: 'Widget', icon: AppWindow },
   { to: '/audit', label: 'Answer audit', icon: ScrollText },
+  { to: '/tokens', label: 'API tokens', icon: KeyRound },
 ];
 
 export interface ShellData {

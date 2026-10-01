@@ -77,6 +77,7 @@ export interface Faq {
   question: string;
   answer: string;
   keywords: string[];
+  visibility: Visibility;
   createdAt: string;
 }
 
@@ -86,6 +87,22 @@ export interface Member {
   displayName: string | null;
   role: Role;
   createdAt: string;
+}
+
+export interface Invitation {
+  id: string;
+  label: string | null;
+  role: Role;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface ApiToken {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
 }
 
 export interface WidgetConfig {
@@ -183,16 +200,18 @@ export const UPDATE_LADDER = gql`
   }
 `;
 
+const FAQ = 'id question answer keywords visibility createdAt';
+
 export const FAQS_QUERY = gql`
-  query Faqs { faqs { id question answer keywords createdAt } }
+  query Faqs { faqs { ${FAQ} } }
 `;
 
 export const CREATE_FAQ = gql`
-  mutation CreateFaq($input: FaqInput!) { createFaq(input: $input) { id question answer keywords createdAt } }
+  mutation CreateFaq($input: FaqInput!) { createFaq(input: $input) { ${FAQ} } }
 `;
 
 export const UPDATE_FAQ = gql`
-  mutation UpdateFaq($id: ID!, $input: FaqInput!) { updateFaq(id: $id, input: $input) { id question answer keywords createdAt } }
+  mutation UpdateFaq($id: ID!, $input: FaqInput!) { updateFaq(id: $id, input: $input) { ${FAQ} } }
 `;
 
 export const DELETE_FAQ = gql`
@@ -203,8 +222,36 @@ export const MEMBERS_QUERY = gql`
   query Members { members { userId email displayName role createdAt } }
 `;
 
-export const INVITE_MEMBER = gql`
-  mutation InviteMember($input: InviteMemberInput!) { inviteMember(input: $input) { userId email displayName role createdAt } }
+const INVITATION = 'id label role createdAt expiresAt';
+
+export const INVITATIONS_QUERY = gql`
+  query Invitations { invitations { ${INVITATION} } }
+`;
+
+export const CREATE_INVITATION = gql`
+  mutation CreateInvitation($input: CreateInvitationInput!) { createInvitation(input: $input) { token invitation { ${INVITATION} } } }
+`;
+
+export const REVOKE_INVITATION = gql`
+  mutation RevokeInvitation($id: ID!) { revokeInvitation(id: $id) }
+`;
+
+export const ACCEPT_INVITATION = gql`
+  mutation AcceptInvitation($token: String!) { acceptInvitation(input: { token: $token }) { workspaceId name role } }
+`;
+
+const API_TOKEN = 'id name createdAt lastUsedAt expiresAt';
+
+export const API_TOKENS_QUERY = gql`
+  query ApiTokens { apiTokens { ${API_TOKEN} } }
+`;
+
+export const CREATE_API_TOKEN = gql`
+  mutation CreateApiToken($input: CreateApiTokenInput!) { createApiToken(input: $input) { token apiToken { ${API_TOKEN} } } }
+`;
+
+export const REVOKE_API_TOKEN = gql`
+  mutation RevokeApiToken($id: ID!) { revokeApiToken(id: $id) }
 `;
 
 export const UPDATE_MEMBER_ROLE = gql`

@@ -7,6 +7,8 @@ export interface AuthUser {
   workspaceId: string;
   /** From the token; RolesGuard replaces it with the live role from workspace_members. */
   role: Role;
+  /** Authenticated with a personal access token: no workspace, only /mcp. */
+  viaApiToken?: boolean;
 }
 
 export interface AccessTokenPayload {

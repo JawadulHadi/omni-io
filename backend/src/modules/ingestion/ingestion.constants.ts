@@ -1,6 +1,8 @@
 import type { DefaultJobOptions } from 'bullmq';
 
 export const INGESTION_QUEUE = 'ingestion';
+/** Scheduled sweep: answer-audit retention plus expired invitations and tokens. */
+export const RETENTION_JOB = 'retention';
 
 /** Jobs carry ids only — never document text — so erasing a document leaves nothing in Redis. */
 export interface IngestJobData {

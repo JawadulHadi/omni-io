@@ -1,5 +1,5 @@
 import { Field, Float, ID, InputType, ObjectType } from '@nestjs/graphql';
-import { IsEmail, IsIn, IsString, IsUUID, Length, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min } from 'class-validator';
 import { RoleEnum } from '../../common/graphql-enums';
 import type { Role } from '../../db/tenant-context';
 
@@ -37,10 +37,33 @@ export class CreateWorkspaceInput {
   @Field() @IsString() @Length(1, 100) name: string;
 }
 
+@ObjectType()
+export class Invitation {
+  @Field(() => ID) id: string;
+  @Field(() => String, { nullable: true, description: 'Who it is meant for — informational only' }) label: string | null;
+  @Field(() => RoleEnum) role: Role;
+  @Field() createdAt: Date;
+  @Field() expiresAt: Date;
+}
+
+@ObjectType()
+export class CreatedInvitation {
+  @Field({ description: 'Shown once. Send the invite link containing it to the person you are inviting.' }) token: string;
+  @Field(() => Invitation) invitation: Invitation;
+}
+
 @InputType()
-export class InviteMemberInput {
-  @Field() @IsEmail() @MaxLength(254) email: string;
+export class CreateInvitationInput {
+  @Field(() => String, { nullable: true }) @IsOptional() @IsString() @MaxLength(200) label?: string;
   @Field(() => RoleEnum) @IsIn(ROLES) role: Role;
+}
+
+/** Shape check only; whether the invitation exists is decided by the database. */
+export const INVITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
+
+@InputType()
+export class AcceptInvitationInput {
+  @Field() @Matches(INVITE_TOKEN_PATTERN, { message: 'Invalid invitation link' }) token: string;
 }
 
 @InputType()

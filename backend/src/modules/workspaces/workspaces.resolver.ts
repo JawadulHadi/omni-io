@@ -1,10 +1,13 @@
-import { ParseUUIDPipe } from '@nestjs/common';
+import { BadRequestException, ParseUUIDPipe } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { CurrentUser, Roles } from '../../common/decorators/auth.decorators';
 import type { AuthUser } from '../../common/request';
 import {
+  AcceptInvitationInput,
+  CreatedInvitation,
+  CreateInvitationInput,
   CreateWorkspaceInput,
-  InviteMemberInput,
+  Invitation,
   LadderSettingsInput,
   Member,
   UpdateMemberRoleInput,
@@ -30,7 +33,7 @@ export class WorkspacesResolver {
 
   @Mutation(() => WorkspaceMembership, { description: 'Creates a workspace you own. Switch to it via POST /auth/switch-workspace.' })
   createWorkspace(@CurrentUser() user: AuthUser, @Args('input') input: CreateWorkspaceInput) {
-    return this.workspaces.create(user.userId, input.name);
+    return this.workspaces.createOwned(user.userId, input.name);
   }
 
   @Mutation(() => Workspace)
@@ -45,10 +48,29 @@ export class WorkspacesResolver {
     return this.workspaces.members();
   }
 
-  @Mutation(() => Member)
+  @Query(() => [Invitation], { description: 'Pending invitations to the current workspace' })
   @Roles('admin')
-  inviteMember(@CurrentUser() user: AuthUser, @Args('input') input: InviteMemberInput) {
-    return this.workspaces.inviteMember(user, input);
+  invitations() {
+    return this.workspaces.invitations();
+  }
+
+  @Mutation(() => CreatedInvitation, { description: "A single-use invite link (7 days). Can't grant above your own role." })
+  @Roles('admin')
+  createInvitation(@CurrentUser() user: AuthUser, @Args('input') input: CreateInvitationInput) {
+    return this.workspaces.createInvitation(user, input);
+  }
+
+  @Mutation(() => Boolean)
+  @Roles('admin')
+  revokeInvitation(@Args('id', { type: () => ID }, ParseUUIDPipe) id: string) {
+    return this.workspaces.revokeInvitation(id);
+  }
+
+  @Mutation(() => WorkspaceMembership, { description: 'Joins the workspace an invite link is for. Switch to it via POST /auth/switch-workspace.' })
+  async acceptInvitation(@CurrentUser() user: AuthUser, @Args('input') input: AcceptInvitationInput) {
+    const membership = await this.workspaces.acceptInvitation(user.userId, input.token);
+    if (!membership) throw new BadRequestException('This invitation link is invalid, already used or expired');
+    return membership;
   }
 
   @Mutation(() => Member)
