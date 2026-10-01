@@ -35,24 +35,26 @@ Each tier removes one dependency. Tier 3's hand-off message needs nothing, not e
 ## Step by step
 
 1. **Load ladder settings.** The per-workspace `confidence_threshold` (default 0.75) and `similarity_floor` (default 0.6). If this read fails, the defaults are used and the trace records it.
-2. **Retrieve.** Embed the question (`RETRIEVAL_QUERY`) and call `match_chunks` for the top 5 chunks. Widget calls pass `public_only = true`. Any error here (embedding outage, DB error) goes straight to Tier 3 with `retrieval_failed`.
+2. **Retrieve.** Embed the question and call `match_chunks` for the top 5 chunks. Widget calls pass `public_only = true`. The embedding call and the vector search share one `RETRIEVAL_TIMEOUT_MS` budget (default 4 s), enforced by a race so it holds even if the provider ignores the abort. They also have their own circuit breaker. An error goes straight to Tier 3 with `retrieval_failed`, a hang with `retrieval_timeout`, and an open breaker with `retrieval_circuit_open`.
 3. **Similarity floor.** Only chunks at or above the floor count as relevant. If none do, no model call is made — there is nothing to ground an answer in — and the question goes to Tier 3 with `no_relevant_context`.
-4. **Circuit breaker.** After 5 consecutive model failures, Tier 1 is skipped for 30 seconds. Customers get Tier 2 immediately instead of each waiting out the timeout. After the cooldown one request is let through (half-open).
+4. **Circuit breaker and budget.** After 5 consecutive model failures, Tier 1 is skipped for 30 seconds. Customers get Tier 2 immediately instead of each waiting out the timeout. After the cooldown exactly one request is let through as a probe (half-open), while the rest keep skipping until it reports back. Each workspace also has a daily allowance of model calls (`TIER1_DAILY_LIMIT_PER_WORKSPACE`). Once it is spent, answers come from Tier 2 until the next UTC day (`tier1_budget_exhausted`).
 5. **Tier 1 generation.** The model gets only the relevant chunks, in delimited `<passage id="…">` blocks. Output is constrained to `{ answer, citedChunkIds, confidence }`. The call is raced against `TIER1_TIMEOUT_MS`, so the budget holds even if the provider SDK ignores the abort signal.
 6. **Tier 1 validation.** The answer is accepted only if all of these hold:
    - it parses against a zod schema (`confidence` must be a number — the string `"0.9"` is rejected)
    - its confidence is at or above the threshold
    - it cites at least one passage
    - **every cited id is one of the passages actually sent**
+   - **the answer's words come from what it cites:** at least `TIER1_MIN_GROUNDING` (default 0.2) of its content words appear in the cited passages. The check is lexical, so it can't prove an answer right. It does catch a confident answer built from words its sources never use. Set it to 0 to disable, for example when questions and documents are in different languages.
 7. **Tier 2.** On any Tier 1 failure, return the top ≤3 relevant chunks verbatim.
-8. **Tier 3.** Match the question against FAQ keywords. These are normalized on write and matched as whole words or phrases in SQL, and the most keyword hits wins. If nothing matches or the lookup fails, return the hand-off message.
+8. **Tier 3.** Match the question against FAQ keywords. These are normalized on write and matched as whole words or phrases in SQL, and the most keyword hits wins. The widget only matches FAQs marked public. If nothing matches or the lookup fails, return the hand-off message.
 9. **Audit.** Emit `answer.completed`. The audit listener writes the row off the response path, so a failed audit write can never demote or break an answer.
 
-## Why "confident enough" uses three signals
+## Why "confident enough" uses four signals
 
-A model's self-reported confidence is poorly calibrated, so it is never the only gate. Tier 1 needs three independent signals to agree:
+A model's self-reported confidence is poorly calibrated, so it is never the only gate. Tier 1 needs four independent signals to agree:
 - **retrieval** found passages above the floor
-- the **citations** are verifiably grounded in them
+- the **citations** point at passages that were actually sent
+- the answer's **wording** is drawn from those passages
 - the **self-score** clears the threshold
 
 Both thresholds are per-workspace settings (Playground → Ladder settings, admin and above). The planned next step is a labeled evaluation set per workspace, so the thresholds are tuned from measured precision rather than intuition.
@@ -67,12 +69,16 @@ Every answer stores why it ended where it did in `answers.decision_note`:
 | `tier1_model_error` | The provider threw (rate limit, 5xx, network) | 2 |
 | `tier1_timeout` | The provider exceeded `TIER1_TIMEOUT_MS` | 2 |
 | `tier1_circuit_open` | Skipped: too many recent model failures | 2 |
+| `tier1_budget_exhausted` | Skipped: the workspace's daily model-call budget is spent | 2 |
 | `tier1_invalid_output` | The output wasn't valid JSON for the schema | 2 |
 | `tier1_low_confidence` | Confidence was below the workspace threshold | 2 |
 | `tier1_no_citations` | The answer cited nothing | 2 |
 | `tier1_invalid_citation` | The answer cited a passage it was never given | 2 |
+| `tier1_ungrounded` | Too few of the answer's words appear in its cited passages | 2 |
 | `no_relevant_context` | Nothing cleared the similarity floor | 3 |
 | `retrieval_failed` | Embedding or vector search failed | 3 |
+| `retrieval_timeout` | Embedding plus search exceeded `RETRIEVAL_TIMEOUT_MS` | 3 |
+| `retrieval_circuit_open` | Skipped: too many recent retrieval failures | 3 |
 
 ## The decision trace
 

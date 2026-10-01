@@ -1,16 +1,18 @@
 import { All, Controller, Post, Req, Res } from '@nestjs/common';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Request, Response } from 'express';
-import { CurrentUser } from '../../common/decorators/auth.decorators';
+import { AllowApiToken, CurrentUser } from '../../common/decorators/auth.decorators';
 import type { AuthUser } from '../../common/request';
 import { McpToolsService } from './mcp.tools';
 
 /**
  * MCP over Streamable HTTP (the current transport; HTTP+SSE is deprecated), in
  * stateless mode: each POST gets a fresh server bound to the bearer-token user.
- * Auth is the same JWT the console uses, enforced by the global AuthGuard.
+ * Auth is a personal access token (created in the console under API tokens) or
+ * a console JWT, enforced by the global AuthGuard.
  */
 @Controller('mcp')
+@AllowApiToken()
 export class McpController {
   constructor(private readonly tools: McpToolsService) {}
 

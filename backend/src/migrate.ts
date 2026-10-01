@@ -4,6 +4,10 @@
  *
  * Runs as DATABASE_MIGRATOR_URL (the schema owner), never as the app role —
  * the app role must not be able to alter tables or policies.
+ *
+ * Lives in src/ so the build compiles it: `npm run migrate` in development,
+ * `node dist/migrate.js` in a production image. Either way, migrations/ and
+ * .env are one directory up.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

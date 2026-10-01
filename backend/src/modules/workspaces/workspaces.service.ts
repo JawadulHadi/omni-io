@@ -1,11 +1,16 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import { randomToken, sha256 } from '../../common/crypto';
 import type { AuthUser } from '../../common/request';
+import type { Env } from '../../config/env';
 import { DbService, TenantQuery } from '../../db/db.service';
 import { Role, ROLE_RANK, TenantContext } from '../../db/tenant-context';
 import { DEFAULT_WIDGET_THEME } from '../widget/widget-theme';
 import {
-  InviteMemberInput,
+  CreatedInvitation,
+  CreateInvitationInput,
+  Invitation,
   LadderSettingsInput,
   Member,
   UpdateMemberRoleInput,
@@ -25,6 +30,7 @@ export class WorkspacesService {
   constructor(
     private readonly db: DbService,
     private readonly tenant: TenantContext,
+    private readonly cfg: ConfigService<Env, true>,
   ) {}
 
   async current(): Promise<Workspace> {
@@ -54,6 +60,14 @@ export class WorkspacesService {
     return rows.map((r) => ({ workspaceId: r.workspace_id, name: r.name, role: r.role }));
   }
 
+  /** A workspace the signed-in user asked for — capped, so one account can't mint workspaces without limit. */
+  async createOwned(userId: string, name: string): Promise<WorkspaceMembership> {
+    const max = this.cfg.get('MAX_WORKSPACES_PER_USER', { infer: true });
+    const owned = (await this.memberships(userId)).filter((m) => m.role === 'owner').length;
+    if (owned >= max) throw new ForbiddenException(`You already own ${owned} workspaces (the limit is ${max})`);
+    return this.create(userId, name);
+  }
+
   /** New workspace with `userId` as owner. The id is minted here so the RLS context can be set before the insert. */
   async create(userId: string, name: string): Promise<WorkspaceMembership> {
     const workspaceId = randomUUID();
@@ -81,18 +95,51 @@ export class WorkspacesService {
     return rows.map(toMember);
   }
 
-  async inviteMember(caller: AuthUser, input: InviteMemberInput): Promise<Member> {
+  /**
+   * A single-use invite link, valid for 7 days. Nobody is added until the person
+   * opens it and accepts — and since it isn't tied to an email address, it says
+   * nothing about who has an account.
+   */
+  async createInvitation(caller: AuthUser, input: CreateInvitationInput): Promise<CreatedInvitation> {
     assertMayGrant(caller.role, input.role);
-    const [user] = await this.db.global<{ id: string }>('select id from users where email = $1', [input.email.trim().toLowerCase()]);
-    if (!user) throw new NotFoundException('No account with that email — ask them to sign up first');
+    const token = randomToken();
+    const [row] = await this.db.query(
+      `insert into workspace_invitations (workspace_id, token_hash, label, role, created_by)
+       values ($1, $2, $3, $4, $5)
+       returning ${INVITATION_COLUMNS}`,
+      [this.tenant.requireWorkspaceId(), sha256(token), input.label?.trim() || null, input.role, caller.userId],
+    );
+    return { token, invitation: toInvitation(row) };
+  }
 
-    const workspaceId = this.tenant.requireWorkspaceId();
-    return this.db.tenant(async (q) => {
-      const [existing] = await q('select 1 from workspace_members where workspace_id = $1 and user_id = $2', [workspaceId, user.id]);
-      if (existing) throw new ConflictException('Already a member — change their role instead');
-      await q('insert into workspace_members (workspace_id, user_id, role) values ($1, $2, $3)', [workspaceId, user.id, input.role]);
-      return this.memberRow(q, user.id);
-    });
+  async invitations(): Promise<Invitation[]> {
+    const rows = await this.db.query(
+      `select ${INVITATION_COLUMNS} from workspace_invitations where workspace_id = $1 and expires_at > now() order by created_at desc`,
+      [this.tenant.requireWorkspaceId()],
+    );
+    return rows.map(toInvitation);
+  }
+
+  async revokeInvitation(id: string): Promise<boolean> {
+    const rows = await this.db.query('delete from workspace_invitations where id = $1 returning id', [id]);
+    if (rows.length === 0) throw new NotFoundException('Invitation not found');
+    return true;
+  }
+
+  /** Pre-tenant: is this a live invitation? (The invitee isn't a member yet.) */
+  async previewInvitation(token: string): Promise<WorkspaceMembership | null> {
+    const [row] = await this.db.global('select workspace_id, workspace_name, role from invitation_preview($1)', [sha256(token)]);
+    return row ? { workspaceId: row.workspace_id, name: row.workspace_name, role: row.role } : null;
+  }
+
+  /**
+   * Consumes the invitation and adds the membership. An existing member keeps
+   * their role. Pass `q` to run inside a caller's transaction. Null if the link
+   * is unknown, used or expired.
+   */
+  async acceptInvitation(userId: string, token: string, q: TenantQuery = (sql, params) => this.db.global(sql, params)): Promise<WorkspaceMembership | null> {
+    const [row] = await q('select workspace_id, workspace_name, role from accept_invitation($1, $2)', [sha256(token), userId]);
+    return row ? { workspaceId: row.workspace_id, name: row.workspace_name, role: row.role } : null;
   }
 
   async updateMemberRole(caller: AuthUser, input: UpdateMemberRoleInput): Promise<Member> {
@@ -167,6 +214,12 @@ function toWorkspace(r: any): Workspace {
     similarityFloor: Number(r.similarity_floor),
     createdAt: r.created_at,
   };
+}
+
+const INVITATION_COLUMNS = 'id, label, role, created_at, expires_at';
+
+function toInvitation(r: any): Invitation {
+  return { id: r.id, label: r.label, role: r.role, createdAt: r.created_at, expiresAt: r.expires_at };
 }
 
 function toMember(r: any): Member {

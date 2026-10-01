@@ -4,7 +4,7 @@ import { FakeProvider } from '../../lib/ai/fake.provider';
 import type { FaqMatch } from '../faq/faq.service';
 import type { RetrievedChunk } from '../ingestion/chunks.repository';
 import type { LadderSettings } from '../workspaces/workspaces.service';
-import { AnswerService, HANDOFF_MESSAGE, SNIPPETS_PREFACE } from './answer.service';
+import { AnswerService, HANDOFF_MESSAGE, LadderBreakers, SNIPPETS_PREFACE } from './answer.service';
 import { ANSWER_COMPLETED, AnswerChannel, AnswerCompletedEvent } from './answer.types';
 import { CircuitBreaker } from './circuit-breaker';
 
@@ -27,7 +27,11 @@ interface Options {
   faq?: FaqMatch | null | Error;
   settings?: LadderSettings | Error;
   timeoutMs?: number;
-  breaker?: CircuitBreaker;
+  retrievalTimeoutMs?: number;
+  minGrounding?: number;
+  generationBreaker?: CircuitBreaker;
+  retrievalBreaker?: CircuitBreaker;
+  budgetLeft?: boolean;
   emitThrows?: boolean;
 }
 
@@ -68,15 +72,18 @@ function setup(o: Options = {}) {
     }),
   };
   const tenant = new TenantContext();
+  const breakers = { generation: o.generationBreaker ?? new CircuitBreaker(), retrieval: o.retrievalBreaker ?? new CircuitBreaker() } as LadderBreakers;
+  const budget = { take: jest.fn(async () => o.budgetLeft ?? true) };
   const service = new AnswerService(
     ai,
     chunks as never,
     faq as never,
     workspaces as never,
     events as never,
-    o.breaker ?? new CircuitBreaker(),
+    breakers,
     tenant,
-    o.timeoutMs ?? 200,
+    { tier1TimeoutMs: o.timeoutMs ?? 200, retrievalTimeoutMs: o.retrievalTimeoutMs ?? 200, minGrounding: o.minGrounding ?? 0.2 },
+    budget,
   );
   const ask = (query = 'How long do refunds take?', channel: AnswerChannel = 'console') =>
     tenant.run({ workspaceId: WORKSPACE }, () => service.askQuestion(query, { channel }));
@@ -85,7 +92,7 @@ function setup(o: Options = {}) {
     expect(call?.[0]).toBe(ANSWER_COMPLETED);
     return call![1];
   };
-  return { ask, ai, chunks, faq, events, event };
+  return { ask, ai, chunks, faq, events, event, budget };
 }
 
 const modelReturns = (body: unknown): AiProvider['generateAnswer'] => async () =>
@@ -170,7 +177,7 @@ describe('AnswerService — resilience ladder', () => {
 
     it('opens the circuit breaker after repeated failures and skips the model call', async () => {
       const { ask, ai, event } = setup({
-        breaker: new CircuitBreaker(2, 60_000),
+        generationBreaker: new CircuitBreaker(2, 60_000),
         generate: async () => Promise.reject(new Error('down')),
       });
       await ask();
@@ -181,6 +188,31 @@ describe('AnswerService — resilience ladder', () => {
       expect(ai.generateAnswer).not.toHaveBeenCalled();
       expect(result.tier).toBe('rag_snippets');
       expect(event().decision).toBe('tier1_circuit_open');
+    });
+
+    it("skips the model once the workspace's daily budget is used up", async () => {
+      const { ask, ai, event } = setup({ budgetLeft: false });
+      const result = await ask();
+      expect(ai.generateAnswer).not.toHaveBeenCalled();
+      expect(result.tier).toBe('rag_snippets');
+      expect(event().decision).toBe('tier1_budget_exhausted');
+    });
+
+    it('rejects a confident answer whose words its citations never use', async () => {
+      const { ask, event } = setup({
+        generate: modelReturns({ answer: 'Shipping to Canada costs twelve dollars per parcel.', citedChunkIds: ['doc-1:0'], confidence: 0.99 }),
+      });
+      const result = await ask();
+      expect(result.tier).toBe('rag_snippets');
+      expect(event().decision).toBe('tier1_ungrounded');
+    });
+
+    it('accepts the same answer when the grounding check is disabled', async () => {
+      const { ask } = setup({
+        minGrounding: 0,
+        generate: modelReturns({ answer: 'Shipping to Canada costs twelve dollars per parcel.', citedChunkIds: ['doc-1:0'], confidence: 0.99 }),
+      });
+      expect((await ask()).tier).toBe('ai_answer');
     });
   });
 
@@ -209,6 +241,30 @@ describe('AnswerService — resilience ladder', () => {
       expect(result.tier).toBe('faq_floor');
       expect(result.trace.find((s) => s.step === 'retrieve')).toMatchObject({ outcome: 'failed' });
       expect(event().decision).toBe('retrieval_failed');
+    });
+
+    it('times out a hanging embedding call instead of hanging the question', async () => {
+      const { ask, event } = setup({ retrievalTimeoutMs: 50, embed: () => new Promise<never>(() => undefined) });
+      const started = Date.now();
+      const result = await ask();
+      expect(result.tier).toBe('faq_floor');
+      expect(event().decision).toBe('retrieval_timeout');
+      expect(Date.now() - started).toBeLessThan(1000);
+    });
+
+    it('opens the retrieval breaker after repeated failures and skips the embedding call', async () => {
+      const { ask, ai, event } = setup({
+        retrievalBreaker: new CircuitBreaker(2, 60_000),
+        embed: async () => Promise.reject(new Error('embedding API unavailable')),
+      });
+      await ask();
+      await ask();
+      ai.embed.mockClear();
+
+      const result = await ask();
+      expect(ai.embed).not.toHaveBeenCalled();
+      expect(result.tier).toBe('faq_floor');
+      expect(event().decision).toBe('retrieval_circuit_open');
     });
 
     it('survives a vector-search DB error', async () => {
@@ -250,6 +306,14 @@ describe('AnswerService — resilience ladder', () => {
       expect(chunks.match).toHaveBeenCalledWith(expect.any(Array), { topK: 5, publicOnly: true });
     });
 
+    it('restricts the widget FAQ floor to public FAQs', async () => {
+      const { ask, faq } = setup({ retrieved: [] });
+      await ask('refunds?', 'widget');
+      expect(faq.findBestMatch).toHaveBeenCalledWith('refunds?', { publicOnly: true });
+      await ask('refunds?', 'console');
+      expect(faq.findBestMatch).toHaveBeenLastCalledWith('refunds?', { publicOnly: false });
+    });
+
     it('refuses to run without a tenant context', async () => {
       const tenant = new TenantContext();
       const service = new AnswerService(
@@ -258,9 +322,10 @@ describe('AnswerService — resilience ladder', () => {
         {} as never,
         {} as never,
         { emit: jest.fn() } as never,
-        new CircuitBreaker(),
+        new LadderBreakers(),
         tenant,
-        100,
+        { tier1TimeoutMs: 100, retrievalTimeoutMs: 100, minGrounding: 0.2 },
+        { take: async () => true },
       );
       await expect(service.askQuestion('hi', { channel: 'console' })).rejects.toThrow(/No workspace in tenant context/);
     });

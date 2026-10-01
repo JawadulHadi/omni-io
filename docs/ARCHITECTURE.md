@@ -45,12 +45,13 @@ One NestJS API serves CRUD, the console's GraphQL (including a live ingestion-pr
 
 ## 3. Backend: NestJS modules
 
-Each feature is a NestJS module with its own resolver/controller, service, and validated DTOs. Global guards run in a fixed order: `AuthGuard` verifies the JWT and fills a request-scoped tenant context (AsyncLocalStorage); `RolesGuard` then checks `@Roles(min)` against the caller's **current** row in `workspace_members`.
+Each feature is a NestJS module with its own resolver/controller, service, and validated DTOs. Global guards run in a fixed order: `AuthGuard` verifies the JWT (or, on `/mcp` only, a personal access token) and fills a request-scoped tenant context (AsyncLocalStorage); `RolesGuard` then checks `@Roles(min)` against the caller's **current** row in `workspace_members`.
 
 | Module | Responsibility | Key interfaces |
 | --- | --- | --- |
-| `AuthModule` | Email/password + Google OAuth (PKCE); 15-min JWT access tokens; opaque, rotating refresh tokens | REST: `/auth/login`, `/auth/refresh`, `/auth/switch-workspace`, `/auth/logout`, `/auth/google` |
-| `WorkspacesModule` | Tenant CRUD, members and roles (owner/admin/editor/viewer), ladder settings | GraphQL: `workspace`, `myWorkspaces`, `inviteMember`, `updateMemberRole`, `updateLadderSettings` |
+| `AuthModule` | Email/password + Google OAuth (PKCE); 15-min JWT access tokens; opaque, rotating refresh tokens; optional closed sign-up (invite links only) | REST: `/auth/login`, `/auth/register`, `/auth/refresh`, `/auth/switch-workspace`, `/auth/logout`, `/auth/google` |
+| `ApiTokensModule` | Personal access tokens for MCP clients, stored hashed, revocable, optionally expiring | GraphQL `apiTokens`, `createApiToken`, `revokeApiToken` |
+| `WorkspacesModule` | Tenant CRUD, members and roles (owner/admin/editor/viewer), single-use invite links, ladder settings | GraphQL: `workspace`, `myWorkspaces`, `createInvitation`, `acceptInvitation`, `updateMemberRole`, `updateLadderSettings` |
 | `DocumentsModule` | Upload (PDF/TXT/MD ≤ 20 MB), paste, visibility, GDPR erasure | REST `POST /documents/upload`; GraphQL `documents`, `createDocumentFromText`, `deleteDocument` |
 | `IngestionModule` | Enqueues jobs; relays worker progress | BullMQ producer; GraphQL subscription `ingestionProgress` |
 | Ingestion worker | Separate process: chunks (1,200 chars / 200 overlap, word-aligned), batch-embeds, idempotent upsert by `${documentId}:${chunkIndex}`, deletes stale tail chunks | BullMQ consumer |
@@ -78,7 +79,9 @@ Every tenant-owned table carries `workspace_id` and a policy of the form `USING 
 | `refresh_tokens` | Rotating sessions | `token_hash`, `family_id`, `used_at`, `revoked_at` |
 | `documents` | Source content | `status`, `source_type`, `visibility` (internal/public), `content`, `storage_key`, `error` |
 | `chunks` | Embedded text | `id` (`${documentId}:${chunkIndex}`), `embedding vector(768)`, `embedding_model`, `content` |
-| `faqs` | Deterministic floor | `question`, `answer`, `keywords[]` (normalized on write) |
+| `faqs` | Deterministic floor | `question`, `answer`, `keywords[]` (normalized on write), `visibility` (internal/public) |
+| `workspace_invitations` | Invite links | `token_hash`, `role`, `label`, `expires_at` (single-use) |
+| `api_tokens` | MCP personal access tokens (user-scoped) | `token_hash`, `name`, `last_used_at`, `expires_at`, `revoked_at` |
 | `answers` | Audit log | `tier`, `channel`, `model`, `tokens_in/out`, `retrieved_chunk_ids[]`, `cited_chunk_ids[]`, `confidence`, `top_similarity`, `decision_note`, `decision_trace jsonb`, `latency_ms` |
 | `widget_configs` | Widget appearance | `theme`, `rotated_at` |
 
@@ -88,7 +91,8 @@ The embedding dimension is fixed at **768** (Gemini `gemini-embedding-2` / `gemi
 
 - It filters by `workspace_id` inside the SQL, on top of RLS.
 - For widget calls, it restricts to public documents.
-- It uses an **HNSW** index with pgvector's iterative scan (`hnsw.iterative_scan = relaxed_order`), so a tenant filter can't starve the result set. IVFFlat is avoided because it post-filters, so small tenants get fewer than k rows, and its centroids are meaningless when built on an empty table.
+- It uses an **HNSW** index with pgvector's iterative scan (`hnsw.iterative_scan = relaxed_order`). IVFFlat is avoided because it post-filters, so small tenants get fewer than k rows, and its centroids are meaningless when built on an empty table.
+- When the iterative scan still comes back short (it stops after `hnsw.max_scan_tuples`), it searches that tenant exactly through the `workspace_id` index. That only happens for small tenants, where an exact search is cheap.
 
 ## 5. RAG pipeline & resilience ladder
 
@@ -163,7 +167,7 @@ Every screen has a designed empty state and error state, rather than falling bac
 - `DbService.tenant()` is the unit of work. It checks out one pooled connection, opens `BEGIN`, sets the workspace with `set_config('app.workspace_id', …, true)` (transaction-local, so it can't bleed into the next request on that connection), runs the queries, and commits. With no workspace in context it throws rather than running unscoped (fail closed).
 - Policies wrap the setting in `nullif(…, '')`. After a transaction-local set, a pooled connection reads the setting back as `''`, not `NULL`, and `''::uuid` would error on every later unscoped query.
 - A tenant transaction is never held across a model or embedding call, so a slow provider can't pin pool connections.
-- Pre-tenant lookups (login, "which workspaces am I in", widget key → workspace, live role checks) go through four narrow `SECURITY DEFINER` functions. Each pins `search_path`, and `EXECUTE` is granted only to the app role.
+- Pre-tenant and cross-tenant operations (login, "which workspaces am I in", widget key → workspace, live role checks, invite links, the retention sweep) go through narrow `SECURITY DEFINER` functions. Each pins `search_path`, and `EXECUTE` is granted only to the app role.
 - The app role has column-level grants on `users` and cannot `SELECT password_hash`.
 - An integration test suite proves isolation against a real Postgres instance. It checks rows with no `WHERE` clause, cross-tenant inserts, updates and deletes, and vector search pointed at another tenant.
 
@@ -171,7 +175,9 @@ Every screen has a designed empty state and error state, rather than falling bac
 
 - **Access tokens:** 15-minute JWTs with `typ: "access"`.
 - **Refresh tokens:** opaque, stored as SHA-256 hashes, and rotated on every use. Presenting an already-rotated token revokes the whole token family (theft detection). They are delivered in an httpOnly, `SameSite=Strict` cookie scoped to `/auth`.
-- **Google sign-in:** authorization code flow with PKCE and a state cookie.
+- **Google sign-in:** authorization code flow with PKCE and a state cookie. A Google identity is never linked to an existing password account by email: sign-up doesn't verify email ownership, so whoever registered the address first could be anyone.
+- **Invitations:** single-use links, valid for 7 days, that the invitee must open and accept. They are bound to possession of the link rather than to an email address, for the same reason. With `ALLOW_SIGNUP=false`, an invite link is the only way to create an account.
+- **API tokens:** `omni_pat_…` personal access tokens for MCP clients. They are stored as SHA-256, accepted only on `/mcp`, and act as their user with live membership checks.
 
 **Roles.** `owner > admin > editor > viewer`, checked on every request against the live membership row, so demotion or removal takes effect immediately. Nobody can grant a role above their own, only owners can modify owners, and a workspace always keeps at least one owner.
 
@@ -180,14 +186,21 @@ Every screen has a designed empty state and error state, rather than falling bac
 - Retrieved passages go into delimited blocks, and delimiter-like text inside them is neutralized.
 - The system prompt treats all context as data.
 - Output is constrained to a JSON schema.
-- Any citation that isn't a retrieved id rejects the answer.
-- The widget answers only from documents explicitly marked **public**; documents are internal by default, so Tier 2 can't publish internal excerpts to anonymous visitors.
+- Any citation that isn't a retrieved id rejects the answer, and so does an answer whose words its citations don't contain.
+- The widget answers only from documents and FAQs explicitly marked **public**. Both are internal by default, so neither Tier 2 nor Tier 3 can publish internal content to anonymous visitors.
 
-**Secrets.** Third-party connector keys are stored with AES-256-GCM, with the row identity (`userId:connectorId`) bound in as additional authenticated data (AAD), so a ciphertext copied to another row won't decrypt. The format is versioned for key rotation.
+**Secrets.** Refresh tokens, invite links and API tokens are stored only as SHA-256 hashes; the plaintext is shown once.
 
 **Widget.** The key is public by design (it sits in page source) and only permits asking questions against public documents. Rotation takes effect immediately and doesn't affect console sessions. CORS is open for `/w/*` without credentials; everything else is restricted to the console origin.
 
-**Rate limiting.** Limits are Redis-backed, so they hold across API instances. The widget is limited per IP and per workspace; login and refresh are limited per IP. Widget questions are capped at 1,000 characters, because every character costs model tokens.
+**Rate limiting and cost ceilings.** Limits are Redis-backed, so they hold across API instances. If Redis is unreachable they fall back to per-process counters instead of blocking requests.
+
+- The widget is limited per IP and per workspace; login and refresh are limited per IP.
+- Console and MCP questions are limited per user.
+- Uploads are limited per workspace per hour.
+- Model calls have a daily per-workspace budget, after which answers come from Tier 2.
+- Workspaces per user are capped.
+- Questions are capped at 1,000 characters, because every character costs model tokens.
 
 **GDPR erasure.** One transaction deletes the document and its chunks and vectors, and scrubs its chunk ids from the audit log. The original file is deleted after commit, because a file store can't join a Postgres transaction; a failed delete is re-queued until it succeeds. Queue jobs carry only ids, so no document text lingers in Redis.
 
@@ -195,9 +208,9 @@ Stated limits:
 
 - Backups age out on their own schedule.
 - Text already sent to the model provider is governed by the provider's retention terms.
-- `answers.query` holds customer-typed text and needs a retention policy per deployment.
+- `answers.query` holds customer-typed text. The worker deletes rows older than `ANSWER_RETENTION_DAYS` (default 90).
 
-**MCP.** MCP runs over Streamable HTTP (HTTP+SSE is deprecated in the MCP spec), in stateless mode, authenticated with the same bearer JWT. Each tool checks the caller's membership of the requested workspace, then runs under that workspace's RLS scope. MCP OAuth 2.1 authorization is on the roadmap.
+**MCP.** MCP runs over Streamable HTTP (HTTP+SSE is deprecated in the MCP spec), in stateless mode, authenticated with a personal access token (or the console's bearer JWT). Each tool checks the caller's membership of the requested workspace, then runs under that workspace's RLS scope. MCP OAuth 2.1 authorization is on the roadmap.
 
 ## 8. Operations & what's next
 
@@ -235,7 +248,7 @@ MULTI-TENANCY & SECURITY (non-negotiable)
 - Every tenant table has workspace_id and an RLS policy using nullif(current_setting('app.workspace_id', true), '')::uuid, with USING and WITH CHECK.
 - The app connects as a non-owner, non-superuser, NOBYPASSRLS role. Migrations run as the owner.
 - Every DB unit of work is a short transaction that sets app.workspace_id with set_config(..., true) from request-scoped context; throw if no workspace is set. Never hold a transaction across an LLM call.
-- Pre-tenant lookups (login, user's workspaces, widget key, live role) go through SECURITY DEFINER functions with a pinned search_path.
+- Pre-tenant and cross-tenant operations (login, user's workspaces, widget key, live role, invite links, retention) go through SECURITY DEFINER functions with a pinned search_path.
 - Roles owner/admin/editor/viewer are checked against the live membership row on every request; no granting above your own role; owners protected.
 - Connector keys use AES-256-GCM with the row identity as AAD.
 - GDPR erasure: one transaction deletes the document, chunks and audit references; the file is deleted after commit, with retry.

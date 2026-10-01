@@ -5,10 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, EmptyState, PageHeader, Skeleton } from '@/components/ui/feedback';
-import { Field, Input, Textarea } from '@/components/ui/form-controls';
+import { Field, Input, Select, Textarea } from '@/components/ui/form-controls';
 import { gqlErrorMessage } from '@/lib/api';
 import { useCan } from '@/lib/auth';
-import { CREATE_FAQ, DELETE_FAQ, FAQS_QUERY, UPDATE_FAQ, type Faq } from '@/lib/gql';
+import { CREATE_FAQ, DELETE_FAQ, FAQS_QUERY, UPDATE_FAQ, type Faq, type Visibility } from '@/lib/gql';
 
 const parseKeywords = (raw: string) =>
   raw
@@ -25,7 +25,7 @@ export default function FaqsPage() {
     <>
       <PageHeader
         title="FAQs"
-        description="Tier 3 — the deterministic floor. Keyword-matched, no model involved, so it still works when every AI dependency is down."
+        description="Tier 3 — the deterministic floor. Keyword-matched, no model involved, so it still works when every AI dependency is down. Only public FAQs answer widget visitors."
       />
       {canEdit && <FaqForm />}
       {error && <Alert variant="destructive" title="Could not load FAQs">{gqlErrorMessage(error)}</Alert>}
@@ -59,6 +59,7 @@ function FaqForm({ faq, onDone }: { faq?: Faq; onDone?: () => void }) {
       question: String(form.get('question')),
       answer: String(form.get('answer')),
       keywords: parseKeywords(String(form.get('keywords'))),
+      visibility: String(form.get('visibility')) as Visibility,
     };
     if (input.keywords.length === 0) return setError('Add at least one keyword — FAQs match on keywords.');
     const res = faq ? await update({ id: faq.id, input }) : await create({ input });
@@ -78,6 +79,12 @@ function FaqForm({ faq, onDone }: { faq?: Faq; onDone?: () => void }) {
       </Field>
       <Field label="Keywords" htmlFor={`k-${faq?.id ?? 'new'}`} hint="Comma-separated words or phrases, matched as whole words, e.g. reset password, forgot password">
         <Input id={`k-${faq?.id ?? 'new'}`} name="keywords" required defaultValue={faq?.keywords.join(', ')} />
+      </Field>
+      <Field label="Visibility" htmlFor={`v-${faq?.id ?? 'new'}`} hint="Internal FAQs answer only the console and MCP; public ones also answer anonymous widget visitors.">
+        <Select id={`v-${faq?.id ?? 'new'}`} name="visibility" defaultValue={faq?.visibility ?? 'internal'} className="sm:w-48">
+          <option value="internal">Internal</option>
+          <option value="public">Public</option>
+        </Select>
       </Field>
       {error && <Alert variant="destructive">{error}</Alert>}
       <div className="flex gap-2">
@@ -140,6 +147,9 @@ function FaqCard({ faq, canEdit }: { faq: Faq; canEdit: boolean }) {
               )}
             </div>
             <div className="flex flex-wrap gap-1">
+              <Badge variant={faq.visibility === 'public' ? 'default' : 'outline'} className="capitalize">
+                {faq.visibility}
+              </Badge>
               {faq.keywords.map((k) => (
                 <Badge key={k} variant="secondary">
                   {k}

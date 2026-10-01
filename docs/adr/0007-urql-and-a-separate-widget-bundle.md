@@ -12,7 +12,7 @@ The console is CRUD-shaped: lists, forms, a handful of mutations and one subscri
 - **Console: urql.** Its document cache invalidates results by typename after mutations. `@urql/exchange-auth` handles token refresh, and `graphql-ws` carries subscriptions. Apollo Client's normalized cache would add weight and configuration the console doesn't need.
 - **Widget: a separate IIFE build (`widget.js`)**, with no router, urql or Tailwind.
   - It renders into a **Shadow DOM** with plain, prefixed CSS.
-  - It is built ASCII-only, so pages that don't declare UTF-8 still render it correctly.
+  - It is built ASCII-only (a post-build step escapes every other character), so pages that don't declare UTF-8 still render it correctly.
   - It calls the API with absolute URLs.
 
 ## Consequences

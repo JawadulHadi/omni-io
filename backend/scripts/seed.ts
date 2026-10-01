@@ -71,7 +71,8 @@ async function main() {
       { title: 'Acme Support', greeting: 'Hi! Ask me anything about Acme.', primaryColor: '#0f172a', position: 'right' },
     ]);
     for (const faq of FAQS) {
-      await client.query('insert into faqs (workspace_id, question, answer, keywords) values ($1, $2, $3, $4)', [
+      // Public: the widget's FAQ floor may serve them to anonymous visitors.
+      await client.query(`insert into faqs (workspace_id, question, answer, keywords, visibility) values ($1, $2, $3, $4, 'public')`, [
         workspaceId,
         faq.question,
         faq.answer,

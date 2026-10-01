@@ -30,7 +30,8 @@ export class FaqService {
     private readonly tenant: TenantContext,
   ) {}
 
-  async findBestMatch(query: string): Promise<FaqMatch | null> {
+  /** `publicOnly` for the anonymous widget: internal FAQs must never answer it. */
+  async findBestMatch(query: string, opts: { publicOnly: boolean }): Promise<FaqMatch | null> {
     const haystack = ` ${normalizeForMatch(query)} `;
     if (haystack.trim() === '') return null;
     const [row] = await this.db.query<FaqMatch>(
@@ -40,20 +41,20 @@ export class FaqService {
                 coalesce(sum(length(kw.k)), 0) as matched_chars
          from faqs f
          left join lateral unnest(f.keywords) as kw(k) on position(' ' || kw.k || ' ' in $2) > 0
-         where f.workspace_id = $1
+         where f.workspace_id = $1 and (not $3 or f.visibility = 'public')
          group by f.id
        ) s
        where score > 0
        order by score desc, matched_chars desc, created_at
        limit 1`,
-      [this.tenant.requireWorkspaceId(), haystack],
+      [this.tenant.requireWorkspaceId(), haystack, opts.publicOnly],
     );
     return row ?? null;
   }
 
   async list(): Promise<Faq[]> {
     const rows = await this.db.query(
-      'select id, question, answer, keywords, created_at from faqs where workspace_id = $1 order by created_at',
+      'select id, question, answer, keywords, visibility, created_at from faqs where workspace_id = $1 order by created_at',
       [this.tenant.requireWorkspaceId()],
     );
     return rows.map(toFaq);
@@ -61,18 +62,18 @@ export class FaqService {
 
   async create(input: FaqInput): Promise<Faq> {
     const [row] = await this.db.query(
-      `insert into faqs (workspace_id, question, answer, keywords) values ($1, $2, $3, $4)
-       returning id, question, answer, keywords, created_at`,
-      [this.tenant.requireWorkspaceId(), input.question, input.answer, normalizeKeywords(input.keywords)],
+      `insert into faqs (workspace_id, question, answer, keywords, visibility) values ($1, $2, $3, $4, $5)
+       returning id, question, answer, keywords, visibility, created_at`,
+      [this.tenant.requireWorkspaceId(), input.question, input.answer, normalizeKeywords(input.keywords), input.visibility],
     );
     return toFaq(row);
   }
 
   async update(id: string, input: FaqInput): Promise<Faq> {
     const [row] = await this.db.query(
-      `update faqs set question = $2, answer = $3, keywords = $4 where id = $1
-       returning id, question, answer, keywords, created_at`,
-      [id, input.question, input.answer, normalizeKeywords(input.keywords)],
+      `update faqs set question = $2, answer = $3, keywords = $4, visibility = $5 where id = $1
+       returning id, question, answer, keywords, visibility, created_at`,
+      [id, input.question, input.answer, normalizeKeywords(input.keywords), input.visibility],
     );
     if (!row) throw new NotFoundException('FAQ not found');
     return toFaq(row);
@@ -86,5 +87,5 @@ export class FaqService {
 }
 
 function toFaq(r: any): Faq {
-  return { id: r.id, question: r.question, answer: r.answer, keywords: r.keywords, createdAt: r.created_at };
+  return { id: r.id, question: r.question, answer: r.answer, keywords: r.keywords, visibility: r.visibility, createdAt: r.created_at };
 }

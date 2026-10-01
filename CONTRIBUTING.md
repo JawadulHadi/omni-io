@@ -4,7 +4,7 @@ Thanks for your interest. This guide covers local setup, the conventions the cod
 
 ## Local setup
 
-Requirements: Node 22 LTS (20.16+ works) and Docker.
+Requirements: Node 24 LTS (the unit tests need 24.9+; the app itself runs on 22.12+) and Docker.
 
 ```sh
 cd backend

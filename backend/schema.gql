@@ -2,6 +2,10 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+input AcceptInvitationInput {
+  token: String!
+}
+
 enum AnswerChannel {
   console
   mcp
@@ -65,6 +69,14 @@ input AnswersFilterInput {
   tier: AnswerTier
 }
 
+type ApiToken {
+  createdAt: DateTime!
+  expiresAt: DateTime
+  id: ID!
+  lastUsedAt: DateTime
+  name: String!
+}
+
 type CitationModel {
   chunkId: ID!
   documentId: ID!
@@ -73,14 +85,41 @@ type CitationModel {
   snippet: String!
 }
 
+input CreateApiTokenInput {
+  """Omit for a token that never expires"""
+  expiresInDays: Int
+  name: String!
+}
+
 input CreateDocumentFromTextInput {
   content: String!
   title: String!
   visibility: Visibility! = internal
 }
 
+input CreateInvitationInput {
+  label: String
+  role: Role!
+}
+
 input CreateWorkspaceInput {
   name: String!
+}
+
+type CreatedApiToken {
+  apiToken: ApiToken!
+
+  """Shown once. Use it as `Authorization: Bearer <token>` against /mcp."""
+  token: String!
+}
+
+type CreatedInvitation {
+  invitation: Invitation!
+
+  """
+  Shown once. Send the invite link containing it to the person you are inviting.
+  """
+  token: String!
 }
 
 """
@@ -115,6 +154,9 @@ type Faq {
   id: ID!
   keywords: [String!]!
   question: String!
+
+  """Only public FAQs can answer anonymous widget visitors"""
+  visibility: Visibility!
 }
 
 input FaqInput {
@@ -123,6 +165,7 @@ input FaqInput {
   """Words or phrases; matched as whole words against the question"""
   keywords: [String!]!
   question: String!
+  visibility: Visibility! = internal
 }
 
 type IngestionProgress {
@@ -140,8 +183,13 @@ enum IngestionStatus {
   retrying
 }
 
-input InviteMemberInput {
-  email: String!
+type Invitation {
+  createdAt: DateTime!
+  expiresAt: DateTime!
+  id: ID!
+
+  """Who it is meant for — informational only"""
+  label: String
   role: Role!
 }
 
@@ -162,9 +210,17 @@ type Member {
 }
 
 type Mutation {
+  """
+  Joins the workspace an invite link is for. Switch to it via POST /auth/switch-workspace.
+  """
+  acceptInvitation(input: AcceptInvitationInput!): WorkspaceMembership!
   askQuestion(query: String!): AnswerResult!
+  createApiToken(input: CreateApiTokenInput!): CreatedApiToken!
   createDocumentFromText(input: CreateDocumentFromTextInput!): Document!
   createFaq(input: FaqInput!): Faq!
+
+  """A single-use invite link (7 days). Can't grant above your own role."""
+  createInvitation(input: CreateInvitationInput!): CreatedInvitation!
 
   """
   Creates a workspace you own. Switch to it via POST /auth/switch-workspace.
@@ -176,9 +232,10 @@ type Mutation {
   """
   deleteDocument(id: ID!): Boolean!
   deleteFaq(id: ID!): Boolean!
-  inviteMember(input: InviteMemberInput!): Member!
   removeMember(userId: ID!): Boolean!
   retryIngestion(id: ID!): Document!
+  revokeApiToken(id: ID!): Boolean!
+  revokeInvitation(id: ID!): Boolean!
   rotateWidgetKey: WidgetConfig!
   setDocumentVisibility(id: ID!, visibility: Visibility!): Document!
   updateFaq(id: ID!, input: FaqInput!): Faq!
@@ -189,8 +246,12 @@ type Mutation {
 
 type Query {
   answers(filter: AnswersFilterInput): AnswerLogPage!
+  apiTokens: [ApiToken!]!
   documents: [Document!]!
   faqs: [Faq!]!
+
+  """Pending invitations to the current workspace"""
+  invitations: [Invitation!]!
   members: [Member!]!
   myWorkspaces: [WorkspaceMembership!]!
   systemInfo: SystemInfo!

@@ -72,3 +72,18 @@ jobs:
       - run: npm run build
       - name: Widget bundle is ASCII-only
         run: "! grep -qP '[^\\x00-\\x7F]' dist/widget.js"
+
+  images:
+    name: Production images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Backend image (API, worker, migrations)
+        run: docker build -f deploy/api.Dockerfile -t omniio-api:ci .
+      - name: Web image (console + Caddy)
+        run: docker build -f deploy/web.Dockerfile -t omniio-web:ci .
+      - name: Compose file is valid
+        working-directory: deploy
+        run: |
+          printf 'DOMAIN=ci.example.com\nPOSTGRES_PASSWORD=x\nAPP_DB_PASSWORD=y\nJWT_SECRET=%s\n' "$(openssl rand -base64 48)" > .env
+          docker compose config --quiet

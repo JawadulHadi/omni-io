@@ -26,12 +26,20 @@ export class DbService implements OnModuleDestroy {
   ) {}
 
   async tenant<T>(fn: (query: TenantQuery) => Promise<T>): Promise<T> {
-    const workspaceId = this.ctx.requireWorkspaceId();
+    return this.transaction(this.ctx.requireWorkspaceId(), fn);
+  }
+
+  /** Several non-tenant statements that must commit together (e.g. create a user and accept an invitation). */
+  globalTransaction<T>(fn: (query: TenantQuery) => Promise<T>): Promise<T> {
+    return this.transaction(null, fn);
+  }
+
+  private async transaction<T>(workspaceId: string | null, fn: (query: TenantQuery) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     let broken = false;
     try {
       await client.query('BEGIN');
-      await client.query(`select set_config('app.workspace_id', $1, true)`, [workspaceId]);
+      if (workspaceId) await client.query(`select set_config('app.workspace_id', $1, true)`, [workspaceId]);
       const result = await fn(bind(client));
       await client.query('COMMIT');
       return result;

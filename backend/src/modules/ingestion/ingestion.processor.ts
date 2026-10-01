@@ -1,12 +1,14 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Job, UnrecoverableError } from 'bullmq';
+import type { Env } from '../../config/env';
 import { DbService } from '../../db/db.service';
 import { AI_PROVIDER, AiProvider } from '../../lib/ai/ai.provider';
 import { BlobStorage } from '../../lib/storage/blob-storage';
 import { chunkText } from './chunking';
 import { ChunksRepository } from './chunks.repository';
-import { DeleteBlobJobData, INGESTION_QUEUE, IngestionProgressEvent, IngestJobData } from './ingestion.constants';
+import { DeleteBlobJobData, INGESTION_QUEUE, IngestionProgressEvent, IngestJobData, RETENTION_JOB } from './ingestion.constants';
 
 const EMBED_BATCH = 32;
 
@@ -24,6 +26,7 @@ export class IngestionProcessor extends WorkerHost {
     private readonly db: DbService,
     private readonly chunks: ChunksRepository,
     private readonly blobs: BlobStorage,
+    private readonly cfg: ConfigService<Env, true>,
   ) {
     super();
   }
@@ -34,6 +37,8 @@ export class IngestionProcessor extends WorkerHost {
         return this.ingest(job as Job<IngestJobData>);
       case 'delete-blob':
         return this.blobs.delete((job.data as DeleteBlobJobData).storageKey);
+      case RETENTION_JOB:
+        return this.retention();
       default:
         throw new UnrecoverableError(`Unknown job ${job.name}`);
     }
@@ -81,6 +86,17 @@ export class IngestionProcessor extends WorkerHost {
         throw err;
       }
     });
+  }
+
+  /** Cross-tenant by nature, so it goes through the run_retention() definer function. */
+  private async retention() {
+    const days = this.cfg.get('ANSWER_RETENTION_DAYS', { infer: true });
+    const [purged] = await this.db.global('select * from run_retention($1)', [days]);
+    this.logger.log(
+      `Retention (answers > ${days || '∞'} days): removed ${purged.purged_answers} answers, ${purged.purged_invitations} invitations, ` +
+        `${purged.purged_refresh_tokens} refresh tokens, ${purged.purged_api_tokens} API tokens`,
+    );
+    return purged;
   }
 
   private setStatus(documentId: string, status: 'processing' | 'failed', error: string | null) {

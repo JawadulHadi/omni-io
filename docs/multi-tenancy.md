@@ -23,7 +23,7 @@ select current_setting('app.workspace_id', true)::uuid;  -- ERROR: invalid input
 | Role | Used by | Privileges |
 | --- | --- | --- |
 | `omniio` (owner) | `npm run migrate` only | Owns every table and function |
-| `omniio_app` | API and worker | DML on tenant tables. **Column-level** grants on `users`, so it can't `SELECT password_hash`. `EXECUTE` on four definer functions. No BYPASSRLS |
+| `omniio_app` | API and worker | DML on tenant tables. **Column-level** grants on `users`, so it can't `SELECT password_hash`. `EXECUTE` on the definer functions below. No BYPASSRLS |
 
 RLS is **enabled, not forced**. That lets the owner-owned `SECURITY DEFINER` functions below see across tenants, and nothing else can.
 
@@ -59,7 +59,7 @@ create policy tenant_isolation on documents
 
 ## Pre-tenant lookups
 
-Some lookups have to happen before a workspace is known. They go through `SECURITY DEFINER` functions with a pinned `search_path` and `EXECUTE` revoked from `PUBLIC`:
+Some lookups and writes have to happen before a workspace is known, or across all of them. They go through `SECURITY DEFINER` functions with a pinned `search_path` and `EXECUTE` revoked from `PUBLIC`:
 
 | Function | Used for |
 | --- | --- |
@@ -67,10 +67,13 @@ Some lookups have to happen before a workspace is known. They go through `SECURI
 | `user_workspaces(user_id)` | Choosing a workspace at login; `myWorkspaces`; MCP `list_workspaces` |
 | `workspace_role(workspace_id, user_id)` | `RolesGuard`'s live role check on every guarded request |
 | `resolve_widget_key(key)` | Widget key → workspace id |
+| `invitation_preview(token_hash)` | Checking an invite link before the invitee has an account |
+| `accept_invitation(token_hash, user_id)` | Consuming an invite link and adding the membership (the invitee isn't a member yet) |
+| `run_retention(answer_days)` | The worker's scheduled sweep: old audit rows, expired invitations and tokens, across all workspaces |
 
 ## Vector search
 
-`match_chunks(workspace_id, embedding, top_k, public_only)` filters by workspace inside the SQL, on top of RLS, so even a wrong argument returns nothing. It uses HNSW with `hnsw.iterative_scan = relaxed_order` (pgvector ≥ 0.8), so the tenant filter can't starve the top-k.
+`match_chunks(workspace_id, embedding, top_k, public_only)` filters by workspace inside the SQL, on top of RLS, so even a wrong argument returns nothing. It uses HNSW with `hnsw.iterative_scan = relaxed_order` (pgvector ≥ 0.8). The iterative scan still stops after `hnsw.max_scan_tuples`, so in a large shared table a small tenant can come back with fewer than k rows. Only in that case does the function search that tenant exactly, through `chunks_workspace_idx`. That is cheap precisely because the tenant is small. [`hardening.e2e-spec.ts`](../backend/test/hardening.e2e-spec.ts) reproduces the starved scan and checks that the fallback returns the exact top-k.
 
 ## Proof
 
@@ -83,6 +86,10 @@ Some lookups have to happen before a workspace is known. They go through `SECURI
 - the widget key resolves without a tenant context
 - `password_hash` is unreadable
 - a tenant query with no context throws
+
+[`backend/test/hardening.e2e-spec.ts`](../backend/test/hardening.e2e-spec.ts) covers migration 0004: invitations are invisible across tenants, single-use and expiring; the vector-search fallback; and retention.
+
+Tables that belong to a user rather than a workspace (`users`, `refresh_tokens`, `api_tokens`) have no RLS. Every query on them filters by the authenticated user's id.
 
 ## Checklist: adding a tenant-owned table
 

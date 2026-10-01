@@ -27,7 +27,7 @@ const STEP_LABEL: Record<string, string> = {
   retrieve: 'Embed question + vector search',
   similarity_floor: 'Similarity floor',
   tier1_generate: 'Tier 1 · model call',
-  tier1_validate: 'Tier 1 · validate JSON, citations, confidence',
+  tier1_validate: 'Tier 1 · validate JSON, citations, confidence, grounding',
   tier2_snippets: 'Tier 2 · return excerpts',
   tier3_faq: 'Tier 3 · FAQ keyword match',
 };

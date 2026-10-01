@@ -1,0 +1,42 @@
+# Console and API on one origin: the SameSite=Strict refresh cookie, CORS and the
+# Google callback need no cross-site configuration. Caddy obtains and renews the
+# certificate for {$DOMAIN} automatically (ports 80 and 443 must reach it).
+{$DOMAIN} {
+	encode zstd gzip
+
+	request_body {
+		max_size 25MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# API surfaces (WebSocket subscriptions on /graphql included).
+	@api path /graphql /auth/* /documents/upload /mcp /health
+	handle @api {
+		reverse_proxy api:3000
+	}
+
+	# Widget API calls go to the API; the hosted chat page at /w/<key> is static.
+	@widgetApi path_regexp ^/w/[0-9a-f]{32}/(ask|config)$
+	handle @widgetApi {
+		reverse_proxy api:3000
+	}
+	@widgetPage path_regexp ^/w/[0-9a-f]{32}/?$
+	handle @widgetPage {
+		root * /srv
+		rewrite * /widget.html
+		file_server
+	}
+
+	# The console: a single-page app.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

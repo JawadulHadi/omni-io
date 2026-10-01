@@ -19,12 +19,25 @@ interface AuthResponse {
   expiresIn: number;
   workspaceId: string;
   role: Role;
+  /** Present when the request carried an invite link. */
+  invitation?: 'accepted' | 'invalid';
+}
+
+export type InvitationOutcome = AuthResponse['invitation'];
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  displayName: string;
+  /** Required unless joining through an invite link. */
+  workspaceName?: string;
+  inviteToken?: string;
 }
 
 interface AuthContextValue {
   state: AuthState;
-  login(email: string, password: string): Promise<void>;
-  register(input: { email: string; password: string; displayName: string; workspaceName: string }): Promise<void>;
+  login(email: string, password: string, inviteToken?: string): Promise<InvitationOutcome>;
+  register(input: RegisterInput): Promise<InvitationOutcome>;
   refresh(): Promise<Session | null>;
   switchWorkspace(workspaceId: string): Promise<void>;
   logout(): Promise<void>;
@@ -121,11 +134,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       refresh,
-      login: async (email, password) => {
-        apply(await authCall('login', { email, password }));
+      login: async (email, password, inviteToken) => {
+        const res = await authCall('login', { email, password, inviteToken });
+        apply(res);
+        return res.invitation;
       },
       register: async (input) => {
-        apply(await authCall('register', input));
+        const res = await authCall('register', input);
+        apply(res);
+        return res.invitation;
       },
       switchWorkspace: async (workspaceId) => {
         apply(await withLock(() => authCall('switch-workspace', { workspaceId })));

@@ -19,7 +19,7 @@ Please include the affected version or commit, reproduction steps, and the impac
 - Cross-tenant data access of any kind: RLS bypass, definer-function misuse, MCP scope escape.
 - Authentication and session flaws: token confusion, refresh-token reuse not detected, role escalation.
 - Prompt-injection paths that expose internal documents through the public widget, or that let a model answer escape citation validation.
-- Secrets exposure (connector keys, password hashes, stack traces).
+- Secrets exposure (API tokens, invite links, password hashes, stack traces).
 
 ## Security model
 

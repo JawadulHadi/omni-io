@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react';
-import { lazy, type ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { IngestionProgressProvider } from '@/components/ingestion/progress-context';
 import { ConsoleLayout } from '@/components/layout/console-layout';
@@ -15,6 +15,8 @@ const FaqsPage = lazy(() => import('./console/routes/faqs'));
 const MembersPage = lazy(() => import('./console/routes/members'));
 const WidgetPage = lazy(() => import('./console/routes/widget'));
 const AuditPage = lazy(() => import('./console/routes/audit'));
+const TokensPage = lazy(() => import('./console/routes/tokens'));
+const InvitePage = lazy(() => import('./console/routes/invite'));
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { state } = useAuth();
@@ -33,9 +35,17 @@ function RequireAuth({ children }: { children: ReactNode }) {
 export function App() {
   return (
     <AuthProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/invite/:token"
+            element={
+              <Suspense fallback={null}>
+                <InvitePage />
+              </Suspense>
+            }
+          />
           <Route
             element={
               <RequireAuth>
@@ -55,6 +65,7 @@ export function App() {
             <Route path="members" element={<MembersPage />} />
             <Route path="widget" element={<WidgetPage />} />
             <Route path="audit" element={<AuditPage />} />
+            <Route path="tokens" element={<TokensPage />} />
             <Route path="*" element={<Navigate to="/playground" replace />} />
           </Route>
         </Routes>

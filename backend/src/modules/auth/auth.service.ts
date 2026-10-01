@@ -1,9 +1,13 @@
-import { ConflictException, ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { sha256 } from '../../common/crypto';
 import type { AccessTokenPayload } from '../../common/request';
-import { DbService } from '../../db/db.service';
+import type { Env } from '../../config/env';
+import { DbService, TenantQuery } from '../../db/db.service';
 import type { Role } from '../../db/tenant-context';
+import type { WorkspaceMembership } from '../workspaces/workspaces.models';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import type { GoogleProfile } from './google-oauth.service';
 import { hashPassword, verifyPassword } from './password';
@@ -17,16 +21,31 @@ export interface Session {
   refreshToken: string;
   workspaceId: string;
   role: Role;
+  /** Set when the request carried an invite link: whether it was accepted. */
+  invitation?: 'accepted' | 'invalid';
 }
 
-const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+export interface RegisterInput {
+  email: string;
+  password: string;
+  displayName: string;
+  workspaceName?: string;
+  inviteToken?: string;
+}
+
 const normalizeEmail = (e: string) => e.trim().toLowerCase();
+const SIGNUP_CLOSED = 'Sign-up is closed — ask a workspace admin for an invite link';
+const INVITE_INVALID = 'This invitation link is invalid, already used or expired';
 
 /**
  * Short-lived JWT access tokens (15 min, `typ: 'access'`) + opaque refresh tokens
  * stored as SHA-256 hashes and rotated on every use. Each login starts a token
  * "family"; if an already-rotated token is ever presented again, someone copied
  * it, and the whole family is revoked.
+ *
+ * New accounts either get their own workspace (when sign-up is open) or join the
+ * workspace of the invite link they arrived with — in the same transaction as the
+ * user row, so a used-up link never leaves an account with no workspace.
  */
 @Injectable()
 export class AuthService {
@@ -36,26 +55,23 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly db: DbService,
     private readonly workspaces: WorkspacesService,
+    private readonly cfg: ConfigService<Env, true>,
   ) {}
 
-  async register(input: { email: string; password: string; displayName: string; workspaceName: string }): Promise<Session> {
-    const email = normalizeEmail(input.email);
-    let userId: string;
-    try {
-      const [row] = await this.db.global<{ id: string }>(
-        'insert into users (email, password_hash, display_name) values ($1, $2, $3) returning id',
-        [email, await hashPassword(input.password), input.displayName],
-      );
-      userId = row.id;
-    } catch (err) {
-      if ((err as { code?: string }).code === '23505') throw new ConflictException('An account with that email already exists');
-      throw err;
-    }
-    const membership = await this.workspaces.create(userId, input.workspaceName);
-    return this.issue(userId, membership.workspaceId, membership.role, randomUUID());
+  get signupOpen(): boolean {
+    return this.cfg.get('ALLOW_SIGNUP', { infer: true });
   }
 
-  async login(email: string, password: string, preferredWorkspaceId?: string): Promise<Session> {
+  async register(input: RegisterInput): Promise<Session> {
+    const email = normalizeEmail(input.email);
+    const passwordHash = await hashPassword(input.password);
+    const user = { email, passwordHash, googleSub: null, displayName: input.displayName };
+    const { userId, membership } = await this.createAccount(user, input.inviteToken, input.workspaceName);
+    const session = await this.issue(userId, membership.workspaceId, membership.role, randomUUID());
+    return input.inviteToken ? { ...session, invitation: 'accepted' } : session;
+  }
+
+  async login(email: string, password: string, preferredWorkspaceId?: string, inviteToken?: string): Promise<Session> {
     const [user] = await this.db.global<{ id: string; password_hash: string | null }>(
       'select id, password_hash from auth_find_user($1)',
       [normalizeEmail(email)],
@@ -63,28 +79,65 @@ export class AuthService {
     // verifyPassword burns the same time whether or not the user exists.
     const ok = await verifyPassword(password, user?.password_hash);
     if (!user || !ok) throw new UnauthorizedException('Invalid email or password');
-    return this.startSession(user.id, preferredWorkspaceId);
+    return this.startSession(user.id, preferredWorkspaceId, inviteToken);
   }
 
-  async loginWithGoogle(profile: GoogleProfile): Promise<Session> {
+  async loginWithGoogle(profile: GoogleProfile, inviteToken?: string): Promise<Session> {
     if (!profile.emailVerified) throw new UnauthorizedException('Your Google account email is not verified');
     const email = normalizeEmail(profile.email);
 
-    let [user] = await this.db.global<{ id: string }>('select id from users where google_sub = $1', [profile.sub]);
-    if (!user) {
-      // Link to an existing email/password account (Google has verified the address), or create one.
-      [user] = await this.db.global<{ id: string }>('select id from users where email = $1', [email]);
-      if (user) {
-        await this.db.global('update users set google_sub = $2 where id = $1', [user.id, profile.sub]);
-      } else {
-        [user] = await this.db.global<{ id: string }>(
-          'insert into users (email, google_sub, display_name) values ($1, $2, $3) returning id',
-          [email, profile.sub, profile.name ?? email],
-        );
-        await this.workspaces.create(user.id, `${profile.name ?? email.split('@')[0]}'s workspace`);
-      }
+    const [user] = await this.db.global<{ id: string }>('select id from users where google_sub = $1', [profile.sub]);
+    if (user) return this.startSession(user.id, undefined, inviteToken);
+
+    // Never link Google to an existing password account by email alone. Sign-up doesn't verify
+    // email ownership, so whoever registered that address first could be anyone — linking would
+    // drop the real owner into an account a stranger holds the password for.
+    const [existing] = await this.db.global<{ id: string }>('select id from users where email = $1', [email]);
+    if (existing) throw new GoogleAccountExistsException();
+
+    const name = profile.name ?? email.split('@')[0];
+    const created = await this.createAccount(
+      { email, passwordHash: null, googleSub: profile.sub, displayName: profile.name ?? email },
+      inviteToken,
+      `${name}'s workspace`,
+    );
+    const session = await this.issue(created.userId, created.membership.workspaceId, created.membership.role, randomUUID());
+    return inviteToken ? { ...session, invitation: 'accepted' } : session;
+  }
+
+  /** Creates the user, then either joins the invited workspace (same transaction) or creates their own. */
+  private async createAccount(
+    user: { email: string; passwordHash: string | null; googleSub: string | null; displayName: string },
+    inviteToken: string | undefined,
+    workspaceName: string | undefined,
+  ): Promise<{ userId: string; membership: WorkspaceMembership }> {
+    if (!inviteToken) {
+      if (!this.signupOpen) throw new ForbiddenException(SIGNUP_CLOSED);
+      if (!workspaceName?.trim()) throw new BadRequestException('workspaceName is required');
     }
-    return this.startSession(user.id);
+    const insertUser = async (q: TenantQuery) => {
+      try {
+        const [row] = await q<{ id: string }>(
+          'insert into users (email, password_hash, google_sub, display_name) values ($1, $2, $3, $4) returning id',
+          [user.email, user.passwordHash, user.googleSub, user.displayName],
+        );
+        return row.id;
+      } catch (err) {
+        if ((err as { code?: string }).code === '23505') throw new ConflictException('An account with that email already exists');
+        throw err;
+      }
+    };
+
+    if (inviteToken) {
+      return this.db.globalTransaction(async (q) => {
+        const userId = await insertUser(q);
+        const membership = await this.workspaces.acceptInvitation(userId, inviteToken, q);
+        if (!membership) throw new BadRequestException(INVITE_INVALID); // rolls the user back too
+        return { userId, membership };
+      });
+    }
+    const userId = await insertUser((sql, params) => this.db.global(sql, params));
+    return { userId, membership: await this.workspaces.create(userId, workspaceName!.trim()) };
   }
 
   /** Rotates the refresh token; optionally re-scopes the session to another workspace the user belongs to. */
@@ -148,11 +201,15 @@ export class AuthService {
     );
   }
 
-  private async startSession(userId: string, preferredWorkspaceId?: string): Promise<Session> {
+  /** Starts a session in the preferred workspace — or, when an invite link came along, in the one it joins. */
+  private async startSession(userId: string, preferredWorkspaceId?: string, inviteToken?: string): Promise<Session> {
+    const joined = inviteToken ? await this.workspaces.acceptInvitation(userId, inviteToken) : null;
     const memberships = await this.workspaces.memberships(userId);
     if (memberships.length === 0) throw new ForbiddenException('Your account is not a member of any workspace');
-    const chosen = memberships.find((m) => m.workspaceId === preferredWorkspaceId) ?? memberships[0];
-    return this.issue(userId, chosen.workspaceId, chosen.role, randomUUID());
+    const target = joined?.workspaceId ?? preferredWorkspaceId;
+    const chosen = memberships.find((m) => m.workspaceId === target) ?? memberships[0];
+    const session = await this.issue(userId, chosen.workspaceId, chosen.role, randomUUID());
+    return inviteToken ? { ...session, invitation: joined ? 'accepted' : 'invalid' } : session;
   }
 
   private async roleIn(workspaceId: string, userId: string): Promise<Role | null> {
@@ -174,5 +231,12 @@ export class AuthService {
 
   private async revokeFamily(familyId: string): Promise<void> {
     await this.db.global('update refresh_tokens set revoked_at = now() where family_id = $1 and revoked_at is null', [familyId]);
+  }
+}
+
+/** A password account already uses the Google account's email address. */
+export class GoogleAccountExistsException extends ConflictException {
+  constructor() {
+    super('An account with this email already exists — sign in with your password');
   }
 }

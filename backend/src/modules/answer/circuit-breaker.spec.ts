@@ -52,4 +52,34 @@ describe('CircuitBreaker', () => {
     b.recordFailure();
     expect(b.isOpen()).toBe(false);
   });
+
+  it('lets exactly one probe through when half-open', () => {
+    const b = breaker();
+    for (let i = 0; i < 3; i++) b.recordFailure();
+    now = 1000;
+    expect(b.isOpen()).toBe(false); // the probe
+    expect(b.isOpen()).toBe(true); // everyone else waits for it
+    b.recordSuccess();
+    expect(b.isOpen()).toBe(false);
+  });
+
+  it('replaces a probe that never reports back after another cooldown', () => {
+    const b = breaker();
+    for (let i = 0; i < 3; i++) b.recordFailure();
+    now = 1000;
+    expect(b.isOpen()).toBe(false);
+    now = 1999;
+    expect(b.isOpen()).toBe(true);
+    now = 2000;
+    expect(b.isOpen()).toBe(false);
+  });
+
+  it('frees the probe slot when the caller releases it', () => {
+    const b = breaker();
+    for (let i = 0; i < 3; i++) b.recordFailure();
+    now = 1000;
+    expect(b.isOpen()).toBe(false);
+    b.release();
+    expect(b.isOpen()).toBe(false);
+  });
 });

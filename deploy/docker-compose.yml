@@ -1,0 +1,108 @@
+# Single-server production deployment: Postgres + pgvector, Redis, the API, the
+# ingestion worker and Caddy (console + HTTPS + reverse proxy).
+#
+#   cp .env.example .env    # fill it in
+#   docker compose up -d --build
+#
+# Migrations run automatically before the API and worker start.
+name: omniio
+
+x-backend: &backend
+  build:
+    context: ..
+    dockerfile: deploy/api.Dockerfile
+  image: omniio-api:latest
+  restart: unless-stopped
+  env_file: .env
+  environment: &backend-env
+    NODE_ENV: production
+    DATABASE_URL: postgres://omniio_app:${APP_DB_PASSWORD:?set APP_DB_PASSWORD}@postgres:5432/omniio
+    REDIS_URL: redis://redis:6379
+    CONSOLE_ORIGIN: https://${DOMAIN:?set DOMAIN}
+    GOOGLE_CALLBACK_URL: https://${DOMAIN}/auth/google/callback
+    COOKIE_SECURE: "true"
+    TRUST_PROXY: "1"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: omniio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: omniio
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omniio -d omniio"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    <<: *backend
+    restart: "no"
+    command: ["node", "dist/migrate.js"]
+    environment:
+      DATABASE_MIGRATOR_URL: postgres://omniio:${POSTGRES_PASSWORD}@postgres:5432/omniio
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *backend
+    command: ["node", "dist/worker.js"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    image: omniio-web:latest
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  caddydata:
+  caddyconfig:

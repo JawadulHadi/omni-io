@@ -1,4 +1,3 @@
-import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
@@ -15,9 +14,11 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { Env, validateEnv } from './config/env';
 import { DbModule } from './db/db.module';
 import { AiModule } from './lib/ai/ai.module';
-import { ConnectionsService } from './lib/connections.service';
+import { RateLimiter } from './lib/redis/rate-limiter';
+import { RedisModule } from './lib/redis/redis.module';
 import { StorageModule } from './lib/storage/blob-storage';
 import { AnswerModule } from './modules/answer/answer.module';
+import { ApiTokensModule } from './modules/api-tokens/api-tokens.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { DocumentsModule } from './modules/documents/documents.module';
@@ -33,6 +34,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module';
     ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnv }),
     EventEmitterModule.forRoot(),
     DbModule,
+    RedisModule,
     AiModule,
     StorageModule,
     BullModule.forRootAsync({
@@ -40,8 +42,8 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module';
       useFactory: (cfg: ConfigService<Env, true>) => ({ connection: { url: cfg.get('REDIS_URL', { infer: true }) } }),
     }),
     ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (cfg: ConfigService<Env, true>) => ({
+      inject: [ConfigService, RateLimiter],
+      useFactory: (cfg: ConfigService<Env, true>, limiter: RateLimiter) => ({
         throttlers: [
           { name: 'ip', ttl: 60_000, limit: cfg.get('WIDGET_LIMIT_PER_IP', { infer: true }) },
           {
@@ -51,7 +53,8 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module';
             getTracker: (req: Record<string, any>) => `widget:${req.params?.key ?? 'none'}`,
           },
         ],
-        storage: new ThrottlerStorageRedisService(cfg.get('REDIS_URL', { infer: true })),
+        // Shared through Redis; falls back to per-process counters if Redis is down, never blocks a request on it.
+        storage: limiter,
       }),
     }),
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
@@ -81,6 +84,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module';
       },
     }),
     AuthModule,
+    ApiTokensModule,
     WorkspacesModule,
     DocumentsModule,
     IngestionModule,
@@ -96,7 +100,6 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module';
     // Order matters: authenticate first, then check the live role.
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    ConnectionsService,
   ],
 })
 export class AppModule {}

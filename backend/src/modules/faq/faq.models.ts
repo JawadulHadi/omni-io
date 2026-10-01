@@ -1,5 +1,6 @@
 import { Field, ID, InputType, ObjectType } from '@nestjs/graphql';
-import { ArrayMaxSize, IsArray, IsString, Length } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsString, Length } from 'class-validator';
+import { Visibility, VisibilityEnum } from '../../common/graphql-enums';
 
 @ObjectType()
 export class Faq {
@@ -7,6 +8,7 @@ export class Faq {
   @Field() question: string;
   @Field() answer: string;
   @Field(() => [String]) keywords: string[];
+  @Field(() => VisibilityEnum, { description: 'Only public FAQs can answer anonymous widget visitors' }) visibility: Visibility;
   @Field() createdAt: Date;
 }
 
@@ -21,4 +23,6 @@ export class FaqInput {
   @IsString({ each: true })
   @Length(1, 80, { each: true })
   keywords: string[];
+
+  @Field(() => VisibilityEnum, { defaultValue: 'internal' }) @IsIn(Object.values(VisibilityEnum)) visibility: Visibility;
 }

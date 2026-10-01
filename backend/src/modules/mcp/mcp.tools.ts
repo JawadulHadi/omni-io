@@ -6,6 +6,7 @@ import { DbService } from '../../db/db.service';
 import type { Role } from '../../db/tenant-context';
 import { MAX_QUERY_CHARS } from '../answer/answer.models';
 import { AnswerService } from '../answer/answer.service';
+import { AskLimiter } from '../answer/ask-limiter';
 import { DocumentsService } from '../documents/documents.service';
 import { FaqService } from '../faq/faq.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
@@ -29,6 +30,7 @@ export class McpToolsService {
     private readonly documents: DocumentsService,
     private readonly faqs: FaqService,
     private readonly answers: AnswerService,
+    private readonly askLimiter: AskLimiter,
   ) {}
 
   createServer(user: AuthUser): McpServer {
@@ -61,6 +63,7 @@ export class McpToolsService {
       },
       async (args) =>
         this.inWorkspace(user, args.workspaceId, async () => {
+          if (!(await this.askLimiter.allow(user.userId))) return failure('Rate limited: too many questions this minute. Try again shortly.');
           const r = await this.answers.askQuestion(args.query, { channel: 'mcp' });
           return json({
             tier: r.tier,

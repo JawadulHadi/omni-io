@@ -8,17 +8,18 @@
     "start:worker": "node dist/worker.js",
     "start:dev": "nest start --watch",
     "worker:dev": "nest start --watch --entryFile worker -p tsconfig.worker.json",
-    "migrate": "tsx scripts/migrate.ts",
+    "migrate": "tsx src/migrate.ts",
+    "migrate:prod": "node dist/migrate.js",
     "seed": "tsx scripts/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "jest",
-    "test:e2e": "jest --config test/jest-e2e.json --runInBand"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config test/jest-e2e.json --runInBand"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",
+    "@as-integrations/express5": "^1.1.2",
     "@google/genai": "^2.24.0",
     "@modelcontextprotocol/sdk": "^1.31.0",
-    "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/apollo": "^14.0.2",
     "@nestjs/bullmq": "^12.0.0",
     "@nestjs/common": "^12.1.0",
@@ -54,7 +55,7 @@
     "jest": "^30.5.2",
     "ts-jest": "^29.2.5",
     "tsx": "^4.19.0",
-    "typescript": "^7.0.2"
+    "typescript": "^6.0.3"
   },
   "jest": {
     "moduleFileExtensions": [
@@ -79,6 +80,6 @@
     "testEnvironment": "node"
   },
   "engines": {
-    "node": ">=20.16"
+    "node": ">=22.12"
   }
 }

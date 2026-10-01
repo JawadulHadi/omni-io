@@ -17,9 +17,29 @@ import {
   TraceStep,
 } from './answer.types';
 import { CircuitBreaker } from './circuit-breaker';
-import { parseModelAnswer } from './model-output';
+import { groundingScore, parseModelAnswer } from './model-output';
 
-export const TIER1_TIMEOUT_MS = Symbol('TIER1_TIMEOUT_MS');
+export const LADDER_CONFIG = Symbol('LADDER_CONFIG');
+export const TIER1_BUDGET = Symbol('TIER1_BUDGET');
+
+export interface LadderConfig {
+  tier1TimeoutMs: number;
+  /** Budget for the query embedding plus vector search together. */
+  retrievalTimeoutMs: number;
+  /** Share of the answer's content words that must appear in its cited passages; 0 disables. */
+  minGrounding: number;
+}
+
+/** Per-workspace daily allowance of model calls. Implementations must never throw. */
+export interface Tier1Budget {
+  take(workspaceId: string): Promise<boolean>;
+}
+
+/** One breaker per dependency: an embedding outage and a chat-model outage trip independently. */
+export class LadderBreakers {
+  readonly generation = new CircuitBreaker(5, 30_000);
+  readonly retrieval = new CircuitBreaker(5, 30_000);
+}
 export const DEFAULT_LADDER: LadderSettings = { confidenceThreshold: 0.75, similarityFloor: 0.6 };
 export const TOP_K = 5;
 export const MAX_SNIPPETS = 3;
@@ -66,8 +86,8 @@ class Run {
  *   Tier 2  rag_snippets  the top retrieved excerpts, verbatim — no model involved
  *   Tier 3  faq_floor     deterministic keyword FAQ, or a human hand-off message
  *
- * Retrieval failure or nothing above the similarity floor skips straight to
- * Tier 3. Every step is recorded in a decision trace that goes to the audit log
+ * Retrieval failure (error, timeout, open breaker) or nothing above the
+ * similarity floor skips straight to Tier 3. Every step is recorded in a decision trace that goes to the audit log
  * and back to the console playground.
  *
  * No DB transaction is held open across a model call: each read/write below is
@@ -83,9 +103,10 @@ export class AnswerService {
     private readonly faq: FaqService,
     private readonly workspaces: WorkspacesService,
     private readonly events: EventEmitter2,
-    private readonly breaker: CircuitBreaker,
+    private readonly breakers: LadderBreakers,
     private readonly tenant: TenantContext,
-    @Inject(TIER1_TIMEOUT_MS) private readonly tier1TimeoutMs: number,
+    @Inject(LADDER_CONFIG) private readonly config: LadderConfig,
+    @Inject(TIER1_BUDGET) private readonly budget: Tier1Budget,
   ) {}
 
   async askQuestion(query: string, opts: { channel: AnswerChannel }): Promise<AnswerOutcome> {
@@ -100,19 +121,9 @@ export class AnswerService {
       run.trace('load_settings', 'failed', `${errorMessage(err)} — using defaults`);
     }
 
-    // Retrieval. An embedding outage or DB error goes straight to the FAQ floor.
-    try {
-      const [embedding] = await this.ai.embed([query], 'query');
-      run.retrieved = await this.chunks.match(embedding, { topK: TOP_K, publicOnly: opts.channel === 'widget' });
-      run.trace(
-        'retrieve',
-        'ok',
-        run.retrieved.length ? `${run.retrieved.length} chunks, top similarity ${fmt(run.retrieved[0].similarity)}` : 'no chunks indexed',
-      );
-    } catch (err) {
-      run.trace('retrieve', 'failed', errorMessage(err));
-      return this.finish(run, await this.faqFloor(run, 'retrieval_failed'));
-    }
+    // Retrieval. An embedding outage, a hang or a DB error goes straight to the FAQ floor.
+    const retrievalFailure = await this.retrieve(run);
+    if (retrievalFailure) return this.finish(run, await this.faqFloor(run, retrievalFailure));
 
     // Nothing relevant: don't spend a model call on context that can't support an answer.
     const relevant = run.retrieved.filter((c) => c.similarity >= settings.similarityFloor);
@@ -138,15 +149,48 @@ export class AnswerService {
     });
   }
 
+  /** Fills run.retrieved; returns the failure decision, or null on success. Bounded by the retrieval timeout. */
+  private async retrieve(run: Run): Promise<string | null> {
+    const breaker = this.breakers.retrieval;
+    if (breaker.isOpen()) {
+      run.trace('retrieve', 'skipped', 'circuit breaker open after repeated retrieval failures');
+      return 'retrieval_circuit_open';
+    }
+    const signal = AbortSignal.timeout(this.config.retrievalTimeoutMs);
+    try {
+      const [embedding] = await raceAbort(this.ai.embed([run.query], 'query', signal), signal);
+      run.retrieved = await raceAbort(this.chunks.match(embedding, { topK: TOP_K, publicOnly: run.channel === 'widget' }), signal);
+      breaker.recordSuccess();
+    } catch (err) {
+      breaker.recordFailure();
+      const timedOut = signal.aborted;
+      run.trace('retrieve', 'failed', timedOut ? `timed out after ${this.config.retrievalTimeoutMs}ms` : errorMessage(err));
+      return timedOut ? 'retrieval_timeout' : 'retrieval_failed';
+    }
+    run.trace(
+      'retrieve',
+      'ok',
+      run.retrieved.length ? `${run.retrieved.length} chunks, top similarity ${fmt(run.retrieved[0].similarity)}` : 'no chunks indexed',
+    );
+    return null;
+  }
+
   /** Returns the accepted Tier 1 rung, or null (with the reason traced) to fall through to Tier 2. */
   private async tier1(run: Run, relevant: RetrievedChunk[], settings: LadderSettings): Promise<Rung | null> {
-    if (this.breaker.isOpen()) {
+    const breaker = this.breakers.generation;
+    if (breaker.isOpen()) {
       run.trace('tier1_generate', 'skipped', 'circuit breaker open after repeated model failures');
       run.tier1Decision = 'tier1_circuit_open';
       return null;
     }
+    if (!(await this.budget.take(run.workspaceId))) {
+      breaker.release();
+      run.trace('tier1_generate', 'skipped', "the workspace's daily model-call budget is used up");
+      run.tier1Decision = 'tier1_budget_exhausted';
+      return null;
+    }
 
-    const signal = AbortSignal.timeout(this.tier1TimeoutMs);
+    const signal = AbortSignal.timeout(this.config.tier1TimeoutMs);
     let output: GenerateOutput;
     try {
       const pending = this.ai.generateAnswer({
@@ -155,11 +199,11 @@ export class AnswerService {
         signal,
       });
       output = await raceAbort(pending, signal);
-      this.breaker.recordSuccess();
+      breaker.recordSuccess();
     } catch (err) {
-      this.breaker.recordFailure();
+      breaker.recordFailure();
       const timedOut = signal.aborted;
-      run.trace('tier1_generate', 'failed', timedOut ? `timed out after ${this.tier1TimeoutMs}ms` : errorMessage(err));
+      run.trace('tier1_generate', 'failed', timedOut ? `timed out after ${this.config.tier1TimeoutMs}ms` : errorMessage(err));
       run.tier1Decision = timedOut ? 'tier1_timeout' : 'tier1_model_error';
       return null;
     }
@@ -183,7 +227,12 @@ export class AnswerService {
     }
 
     const cited = [...new Set(citedChunkIds)].map((id) => byId.get(id)!);
-    run.trace('tier1_validate', 'ok', `confidence ${fmt(confidence)}, ${cited.length} citation(s) verified`);
+    // The confidence is the model's own claim; this checks the answer's words actually come from what it cites.
+    const grounding = groundingScore(answer, cited.map((c) => c.content));
+    if (grounding < this.config.minGrounding) {
+      return this.reject(run, 'tier1_ungrounded', `only ${fmt(grounding)} of the answer's words appear in the cited passages (< ${fmt(this.config.minGrounding)})`);
+    }
+    run.trace('tier1_validate', 'ok', `confidence ${fmt(confidence)}, ${cited.length} citation(s) verified, grounding ${fmt(grounding)}`);
     return {
       tier: 'ai_answer',
       answer,
@@ -203,7 +252,7 @@ export class AnswerService {
   private async faqFloor(run: Run, decision: string): Promise<Rung> {
     let match: FaqMatch | null = null;
     try {
-      match = await this.faq.findBestMatch(run.query);
+      match = await this.faq.findBestMatch(run.query, { publicOnly: run.channel === 'widget' });
       run.trace('tier3_faq', match ? 'ok' : 'rejected', match ? `matched FAQ "${match.question}"` : 'no keyword match — hand-off message');
     } catch (err) {
       run.trace('tier3_faq', 'failed', `${errorMessage(err)} — hand-off message`);
