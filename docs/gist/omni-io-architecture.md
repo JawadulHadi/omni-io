@@ -1,10 +1,10 @@
-# Omni.io — System Architecture
+# Omni.io - System Architecture
 
 **AI customer support that degrades gracefully instead of failing.** Multi-tenant RAG on NestJS, PostgreSQL row-level security + pgvector, BullMQ, Gemini and React.
 
-Jawad Ul Hadi · Backend Lead & Architect · October 2026 · v1.0.0 + unreleased deployment hardening
+Jawad Ul Hadi - Backend Lead & Architect - October 2026 - v1.0.0 + unreleased deployment hardening
 
-Source: [github.com/JawadulHadi/omni-io](https://github.com/JawadulHadi/omni-io) · Case study: *Designing for AI Failure* · [ADRs](https://github.com/JawadulHadi/omni-io/tree/main/docs/adr)
+Source: [github.com/JawadulHadi/omni-io](https://github.com/JawadulHadi/omni-io) - Case study: *Designing for AI Failure* - [ADRs](https://github.com/JawadulHadi/omni-io/tree/main/docs/adr)
 
 ---
 
@@ -37,7 +37,7 @@ Omni.io follows three rules:
 
 | Rule | How it is enforced |
 | --- | --- |
-| **Every question gets an answer** | A three-tier ladder in one service method that never throws: cited AI answer → verbatim excerpts → FAQ or human hand-off |
+| **Every question gets an answer** | A three-tier ladder in one service method that never throws: cited AI answer -> verbatim excerpts -> FAQ or human hand-off |
 | **Every answer explains itself** | A step-by-step decision trace, stored in the audit log and shown to support staff |
 | **Tenants can't see each other's data, even through a bug** | Postgres row-level security under a `NOBYPASSRLS` role, tested against a real database |
 
@@ -48,7 +48,7 @@ Omni.io follows three rules:
 ```mermaid
 flowchart LR
   subgraph People
-    OP["Support team<br/>(owner · admin · editor · viewer)"]
+    OP["Support team<br/>(owner - admin - editor - viewer)"]
     VIS["Customer's website visitor<br/>(anonymous)"]
     AIA["AI assistant<br/>(Claude, Cursor, etc.)"]
   end
@@ -64,8 +64,8 @@ flowchart LR
 
   OP -- "Admin console<br/>GraphQL + WebSocket" --> SYS
   VIS -- "Embedded widget<br/>REST /w/:key" --> SYS
-  AIA -- "MCP · Streamable HTTP<br/>personal access token" --> SYS
-  SYS -- "embed · generate" --> GEM
+  AIA -- "MCP - Streamable HTTP<br/>personal access token" --> SYS
+  SYS -- "embed - generate" --> GEM
   SYS -- "PKCE sign-in" --> GOO
 ```
 
@@ -75,7 +75,7 @@ There are three ways in, each with its own trust level:
 | --- | --- | --- | --- |
 | Console | Workspace members | 15-minute JWT + rotating refresh cookie | Everything their role allows |
 | Widget | Anonymous visitors | Public, rotatable widget key | Only documents and FAQs marked **public** |
-| MCP | AI assistants acting for a user | `omni_pat_…` personal access token | Exactly what that user can see |
+| MCP | AI assistants acting for a user | `omni_pat_...` personal access token | Exactly what that user can see |
 
 ---
 
@@ -83,18 +83,18 @@ There are three ways in, each with its own trust level:
 
 ```mermaid
 flowchart TB
-  subgraph Edge["Edge · Caddy (auto-HTTPS)"]
+  subgraph Edge["Edge - Caddy (auto-HTTPS)"]
     CAD["Static console + widget.js<br/>reverse proxy"]
   end
 
   subgraph App["Application tier"]
-    API["NestJS API<br/>GraphQL · REST · MCP · WebSocket<br/>(stateless, horizontally scalable)"]
-    WRK["Ingestion worker<br/>separate Node process<br/>chunk · embed · retention sweep"]
+    API["NestJS API<br/>GraphQL - REST - MCP - WebSocket<br/>(stateless, horizontally scalable)"]
+    WRK["Ingestion worker<br/>separate Node process<br/>chunk - embed - retention sweep"]
   end
 
   subgraph Data["Data tier"]
-    PG[("PostgreSQL 16 + pgvector 0.8<br/>RLS · HNSW · SECURITY DEFINER fns")]
-    RD[("Redis 7<br/>BullMQ · rate limits · budgets · progress")]
+    PG[("PostgreSQL 16 + pgvector 0.8<br/>RLS - HNSW - SECURITY DEFINER fns")]
+    RD[("Redis 7<br/>BullMQ - rate limits - budgets - progress")]
   end
 
   GEM["Gemini API"]
@@ -103,7 +103,7 @@ flowchart TB
   API -- "enqueue job (ids only)" --> RD
   RD -- "jobs" --> WRK
   WRK -. "progress events" .-> RD
-  RD -. "QueueEvents → GraphQL subscription" .-> API
+  RD -. "QueueEvents -> GraphQL subscription" .-> API
   API -- "omniio_app role" --> PG
   WRK -- "omniio_app role" --> PG
   API -- "query embedding + Tier 1 generation<br/>(timeout + circuit breaker)" --> GEM
@@ -128,21 +128,21 @@ flowchart LR
   end
 
   subgraph Features
-    AUTH["AuthModule<br/>login · register · refresh · Google"]
+    AUTH["AuthModule<br/>login - register - refresh - Google"]
     TOK["ApiTokensModule<br/>MCP PATs"]
-    WS["WorkspacesModule<br/>members · roles · invites · ladder settings"]
-    DOC["DocumentsModule<br/>upload · paste · visibility · erasure"]
-    ING["IngestionModule<br/>producer · progress relay"]
+    WS["WorkspacesModule<br/>members - roles - invites - ladder settings"]
+    DOC["DocumentsModule<br/>upload - paste - visibility - erasure"]
+    ING["IngestionModule<br/>producer - progress relay"]
     ANS["AnswerModule<br/>resilience ladder"]
     FAQ["FaqModule<br/>Tier 3 floor"]
-    WID["WidgetModule<br/>public key · theme · rotation"]
+    WID["WidgetModule<br/>public key - theme - rotation"]
     AUD["AuditModule<br/>answer.completed listener"]
     MCP["McpModule<br/>4 tools"]
-    HLT["HealthModule<br/>/health · systemInfo"]
+    HLT["HealthModule<br/>/health - systemInfo"]
   end
 
   subgraph Infra["Shared infrastructure"]
-    DB["DbService<br/>tenant() · withWorkspace() · global()"]
+    DB["DbService<br/>tenant() - withWorkspace() - global()"]
     AI["AiProvider<br/>Gemini | Fake"]
     RL["Redis rate limiter<br/>+ in-process fallback"]
     BS["BlobStorage<br/>none | local"]
@@ -163,7 +163,7 @@ flowchart LR
 
 | Module | Main operations |
 | --- | --- |
-| `AuthModule` | `POST /auth/login · /register · /refresh · /switch-workspace · /logout · /google` |
+| `AuthModule` | `POST /auth/login - /register - /refresh - /switch-workspace - /logout - /google` |
 | `ApiTokensModule` | `apiTokens`, `createApiToken`, `revokeApiToken` |
 | `WorkspacesModule` | `workspace`, `myWorkspaces`, `createInvitation`, `acceptInvitation`, `updateMemberRole`, `updateLadderSettings` |
 | `DocumentsModule` | `POST /documents/upload`, `documents`, `createDocumentFromText`, `deleteDocument` |
@@ -183,16 +183,16 @@ Every request passes the same gates in a fixed order. No feature code can skip t
 ```mermaid
 flowchart LR
   R["HTTP / WS request"] --> TC["TenantContext middleware<br/>opens AsyncLocalStorage scope"]
-  TC --> CP["cookie-parser · JSON body 2 MB"]
+  TC --> CP["cookie-parser - JSON body 2 MB"]
   CP --> AG{"AuthGuard<br/>@Public?"}
   AG -- "public route" --> RG
-  AG -- "JWT valid<br/>(PAT only on /mcp)" --> FILL["fill context:<br/>userId · workspaceId"]
+  AG -- "JWT valid<br/>(PAT only on /mcp)" --> FILL["fill context:<br/>userId - workspaceId"]
   AG -- "invalid" --> X401["401"]
   FILL --> RG{"RolesGuard<br/>@Roles(min) vs<br/>LIVE membership row"}
   RG -- "insufficient" --> X403["403"]
-  RG -- "ok" --> VP["ValidationPipe<br/>whitelist · forbidNonWhitelisted"]
+  RG -- "ok" --> VP["ValidationPipe<br/>whitelist - forbidNonWhitelisted"]
   VP --> H["Resolver / controller"]
-  H --> DBS["DbService.tenant()<br/>BEGIN · set_config(app.workspace_id, local) · queries · COMMIT"]
+  H --> DBS["DbService.tenant()<br/>BEGIN - set_config(app.workspace_id, local) - queries - COMMIT"]
   H -. "any error" .-> EF["AllExceptionsFilter<br/>sanitized, no stack traces"]
 ```
 
@@ -206,33 +206,33 @@ One method, `AnswerService.askQuestion()`, never throws. Every branch appends to
 
 ```mermaid
 flowchart TD
-  Q(["Question ≤ 1,000 chars"]) --> RB{"Retrieval breaker open?"}
+  Q(["Question, max 1,000 chars"]) --> RB{"Retrieval breaker open?"}
   RB -- "yes" --> T3
   RB -- "no" --> E["Embed query + match_chunks<br/>(RETRIEVAL_TIMEOUT_MS = 4 s)"]
   E -- "error / timeout" --> T3
-  E --> F{"Any chunk ≥ workspace<br/>similarity floor?"}
-  F -- "no · no_relevant_context" --> T3
+  E --> F{"Any chunk >= workspace<br/>similarity floor?"}
+  F -- "no - no_relevant_context" --> T3
   F -- "yes" --> GB{"Generation breaker open?"}
-  GB -- "yes · tier1_circuit_open" --> T2
+  GB -- "yes - tier1_circuit_open" --> T2
   GB -- "no" --> BUD{"Daily model-call<br/>budget left?"}
-  BUD -- "no · tier1_budget_exhausted" --> T2
-  BUD -- "yes" --> G["Gemini · JSON schema output<br/>(TIER1_TIMEOUT_MS = 8 s)"]
-  G -- "error · tier1_model_error<br/>timeout · tier1_timeout" --> T2
+  BUD -- "no - tier1_budget_exhausted" --> T2
+  BUD -- "yes" --> G["Gemini - JSON schema output<br/>(TIER1_TIMEOUT_MS = 8 s)"]
+  G -- "error - tier1_model_error<br/>timeout - tier1_timeout" --> T2
   G --> V1{"Valid JSON?"}
-  V1 -- "no · tier1_invalid_output" --> T2
-  V1 -- "yes" --> V2{"confidence ≥ threshold?"}
-  V2 -- "no · tier1_low_confidence" --> T2
-  V2 -- "yes" --> V3{"cites ≥ 1 passage, all<br/>ids ⊆ retrieved?"}
-  V3 -- "no · tier1_no_citations /<br/>tier1_invalid_citation" --> T2
-  V3 -- "yes" --> V4{"grounding ≥ TIER1_MIN_GROUNDING?<br/>(answer words found in citations)"}
-  V4 -- "no · tier1_ungrounded" --> T2
-  V4 -- "yes" --> T1(["Tier 1 · cited AI answer"])
-  T2(["Tier 2 · top ≤ 3 excerpts verbatim"])
-  T3{"FAQ whole-word<br/>keyword match?"} -- "yes" --> F3(["Tier 3 · FAQ answer"])
-  T3 -- "no / DB error" --> H(["Tier 3 · human hand-off message"])
+  V1 -- "no - tier1_invalid_output" --> T2
+  V1 -- "yes" --> V2{"confidence >= threshold?"}
+  V2 -- "no - tier1_low_confidence" --> T2
+  V2 -- "yes" --> V3{"cites 1+ passages, all<br/>ids in retrieved set?"}
+  V3 -- "no - tier1_no_citations /<br/>tier1_invalid_citation" --> T2
+  V3 -- "yes" --> V4{"grounding >= TIER1_MIN_GROUNDING?<br/>(answer words found in citations)"}
+  V4 -- "no - tier1_ungrounded" --> T2
+  V4 -- "yes" --> T1(["Tier 1 - cited AI answer"])
+  T2(["Tier 2 - top 3 excerpts at most, verbatim"])
+  T3{"FAQ whole-word<br/>keyword match?"} -- "yes" --> F3(["Tier 3 - FAQ answer"])
+  T3 -- "no / DB error" --> H(["Tier 3 - human hand-off message"])
 
   T1 & T2 & F3 & H --> EV["emit answer.completed"]
-  EV -. "audit write fails → logged only" .-> AUD[("answers table")]
+  EV -. "audit write fails -> logged only" .-> AUD[("answers table")]
 ```
 
 **What "confident enough" means.** Tier 1 needs four independent checks to pass:
@@ -279,7 +279,7 @@ sequenceDiagram
 
   U->>C: types question in Playground
   C->>A: mutation askQuestion(query)
-  A->>A: AuthGuard → RolesGuard(viewer) → AskLimiter
+  A->>A: AuthGuard -> RolesGuard(viewer) -> AskLimiter
   A->>P: tenant tx: read ladder settings
   A->>G: embed(query) [4 s budget]
   G-->>A: 768-dim vector
@@ -288,7 +288,7 @@ sequenceDiagram
   Note over A: no DB transaction is held during the model call
   A->>G: generate(JSON schema, delimited passages) [8 s budget]
   G-->>A: { answer, citedChunkIds, confidence }
-  A->>A: validate JSON · citations ⊆ retrieved · confidence · grounding
+  A->>A: validate JSON - citations within retrieved set - confidence - grounding
   A-->>C: AnswerOutcome { tier, answer, citations, trace }
   A--)L: event answer.completed
   L->>P: tenant tx: insert into answers (tokens, ids, trace, latency)
@@ -311,15 +311,15 @@ sequenceDiagram
   participant G as Gemini
   participant P as Postgres
 
-  E->>C: drop file (PDF / TXT / MD ≤ 20 MB)
+  E->>C: drop file (PDF / TXT / MD, max 20 MB)
   C->>A: POST /documents/upload
   A->>A: ingest rate limit (per workspace / hour)
   opt PDF
-    A->>X: parse (30 s limit · 512 MB heap · max 2 concurrent)
+    A->>X: parse (30 s limit - 512 MB heap - max 2 concurrent)
     X-->>A: extracted text
   end
   A->>P: insert document (status = pending)
-  A->>Q: add job { documentId, workspaceId } — ids only
+  A->>Q: add job { documentId, workspaceId } - ids only
   alt Redis down
     A->>P: status = failed (Retry button in console)
   end
@@ -334,7 +334,7 @@ sequenceDiagram
   end
   W->>P: upsert chunks by "documentId:chunkIndex" + delete stale tail
   W->>P: status = ready
-  Note over W: failures retry with backoff, UnrecoverableError → failed
+  Note over W: failures retry with backoff, UnrecoverableError -> failed
 ```
 
 **Idempotency.** Chunk ids are deterministic (`${documentId}:${chunkIndex}`), so a retried job overwrites rather than duplicates. Stale tail chunks from a shorter re-ingest are deleted in the same transaction.
@@ -451,7 +451,7 @@ erDiagram
 - It uses an HNSW index with `hnsw.iterative_scan = relaxed_order`. IVFFlat would post-filter, so small tenants would get fewer than k rows.
 - If the iterative scan still comes back short, it falls back to an exact search for that tenant only, which is cheap for small tenants.
 
-Migrations are plain, forward-only SQL files (`0001_init` → `0004_hardening`), applied by a ~60-line runner under an advisory lock.
+Migrations are plain, forward-only SQL files (`0001_init` -> `0004_hardening`), applied by a ~60-line runner under an advisory lock.
 
 ---
 
@@ -461,18 +461,18 @@ Isolation is enforced in Postgres, in layers, so that no single application bug 
 
 ```mermaid
 flowchart TB
-  L1["① Request context<br/>AuthGuard puts workspaceId in AsyncLocalStorage<br/>(no workspace → DbService throws: fail closed)"]
-  L2["② Unit of work<br/>one short transaction · set_config('app.workspace_id', id, true)<br/>transaction-local, can't leak to the next pooled request"]
-  L3["③ Database role<br/>omniio_app: not owner · not superuser · NOBYPASSRLS<br/>column grants hide users.password_hash"]
-  L4["④ RLS policy on every tenant table<br/>USING / WITH CHECK (workspace_id = nullif(current_setting(...), '')::uuid)"]
-  L5["⑤ Narrow SECURITY DEFINER functions<br/>auth_find_user · user_workspaces · workspace_role · resolve_widget_key<br/>invitation_preview · accept_invitation · run_retention (pinned search_path)"]
-  L6["⑥ Proof<br/>e2e tests as omniio_app: no-WHERE selects, cross-tenant insert/update/delete,<br/>vector search aimed at another tenant"]
+  L1["(1) Request context<br/>AuthGuard puts workspaceId in AsyncLocalStorage<br/>(no workspace -> DbService throws: fail closed)"]
+  L2["(2) Unit of work<br/>one short transaction - set_config('app.workspace_id', id, true)<br/>transaction-local, can't leak to the next pooled request"]
+  L3["(3) Database role<br/>omniio_app: not owner - not superuser - NOBYPASSRLS<br/>column grants hide users.password_hash"]
+  L4["(4) RLS policy on every tenant table<br/>USING / WITH CHECK (workspace_id = nullif(current_setting(...), '')::uuid)"]
+  L5["(5) Narrow SECURITY DEFINER functions<br/>auth_find_user - user_workspaces - workspace_role - resolve_widget_key<br/>invitation_preview - accept_invitation - run_retention (pinned search_path)"]
+  L6["(6) Proof<br/>e2e tests as omniio_app: no-WHERE selects, cross-tenant insert/update/delete,<br/>vector search aimed at another tenant"]
   L1 --> L2 --> L3 --> L4
   L4 -.-> L5
   L4 -.-> L6
 ```
 
-**Why `nullif(…, '')`?** After a transaction-local `set_config`, a pooled connection reads the setting back as `''`, not `NULL`, and `''::uuid` raises an error on every later unscoped query.
+**Why `nullif(..., '')`?** After a transaction-local `set_config`, a pooled connection reads the setting back as `''`, not `NULL`, and `''::uuid` raises an error on every later unscoped query.
 
 **Why no transaction across model calls?** A slow LLM would pin pool connections. Each unit of work holds a connection for milliseconds.
 
@@ -488,18 +488,18 @@ sequenceDiagram
   participant P as Postgres
 
   B->>A: POST /auth/login (email, password)
-  A->>P: auth_find_user() — SECURITY DEFINER
+  A->>P: auth_find_user() - SECURITY DEFINER
   A->>A: scrypt verify
   A->>P: insert refresh token (SHA-256, new family)
   A-->>B: access JWT (15 min, memory only) + httpOnly SameSite=Strict cookie (path /auth)
   Note over B: access token expires
   B->>B: Web Lock: one refresh across all tabs
   B->>A: POST /auth/refresh (cookie)
-  A->>P: mark old token used · insert next token (same family)
+  A->>P: mark old token used - insert next token (same family)
   A-->>B: new access JWT + rotated cookie
   alt an already-used token is presented (theft)
     A->>P: revoke the whole family
-    A-->>B: 401 — every session in that family is signed out
+    A-->>B: 401 - every session in that family is signed out
   end
 ```
 
@@ -509,7 +509,7 @@ sequenceDiagram
 | Refresh token | Opaque, SHA-256 at rest, rotated on every use, reuse revokes the whole family |
 | Google sign-in | Authorization code + PKCE + state cookie. **Never** auto-linked to an existing password account by email, because sign-up doesn't verify email ownership |
 | Invitations | Single-use links valid for 7 days, bound to possession of the link. With `ALLOW_SIGNUP=false` they are the only way to create an account |
-| Roles | `owner > admin > editor > viewer`. Nobody can grant above their own role, only owners can modify owners, and there is always ≥ 1 owner |
+| Roles | `owner > admin > editor > viewer`. Nobody can grant above their own role, only owners can modify owners, and there is always at least 1 owner |
 | Production boot guard | The API refuses to start with `COOKIE_SECURE=false` or the example `JWT_SECRET` |
 
 ---
@@ -526,18 +526,18 @@ sequenceDiagram
   participant R as Redis
   participant P as Postgres
 
-  S->>J: <script src=".../widget.js" data-omniio-key=KEY>
+  S->>J: loads widget.js (one script tag with data-omniio-key=KEY)
   J->>A: GET /w/KEY/config
   A->>P: resolve_widget_key(KEY)
   alt key unknown or rotated
-    A-->>J: 404 → widget stays hidden
+    A-->>J: 404 -> widget stays hidden
   else Postgres down
     A-->>J: default theme
   end
   V->>J: asks a question
   J->>A: POST /w/KEY/ask (CORS *, no credentials)
   A->>R: rate limit per IP + per workspace
-  A->>A: ladder with public_only = true · no trace returned
+  A->>A: ladder with public_only = true - no trace returned
   A-->>J: { tier, answer, citations }
 ```
 
@@ -557,24 +557,24 @@ sequenceDiagram
   participant T as McpToolsService
   participant P as Postgres
 
-  M->>A: JSON-RPC tools/call + Bearer omni_pat_…
-  A->>A: AuthGuard (PAT accepted only on /mcp) → user
+  M->>A: JSON-RPC tools/call + Bearer omni_pat_...
+  A->>A: AuthGuard (PAT accepted only on /mcp) -> user
   A->>T: new stateless McpServer bound to user
   T->>P: workspace_role(workspaceId, userId)
   alt not a member
     T-->>M: isError: "You are not a member of that workspace."
   else member
-    T->>P: withWorkspace(workspaceId) — same RLS scope as the console
+    T->>P: withWorkspace(workspaceId) - same RLS scope as the console
     T-->>M: JSON result
   end
 ```
 
 | Tool | Input | Effect |
 | --- | --- | --- |
-| `list_workspaces` | — | Read-only: the caller's memberships and roles |
+| `list_workspaces` | - | Read-only: the caller's memberships and roles |
 | `list_documents` | `workspaceId` | Read-only: documents with ingestion status |
 | `list_faqs` | `workspaceId` | Read-only: Tier 3 FAQ entries |
-| `ask_question` | `workspaceId`, `query` (≤ 1,000 chars) | Runs the ladder. It calls Gemini, writes an audit row and is rate-limited per user |
+| `ask_question` | `workspaceId`, `query` (max 1,000 chars) | Runs the ladder. It calls Gemini, writes an audit row and is rate-limited per user |
 
 Every tool declares a title, an input schema and all four MCP annotation hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), so clients can warn before a tool with side effects runs.
 
@@ -590,13 +590,13 @@ The reference deployment is one server running Docker Compose. The same images r
 flowchart TB
   NET(("Internet")) -- ":80 / :443 (HTTP/3)" --> WEB
 
-  subgraph Host["Single Linux host · docker compose (project: omniio)"]
-    WEB["web · Caddy<br/>auto-HTTPS · HSTS · nosniff<br/>console + widget static files"]
-    API["api · node dist/main.js :3000<br/>healthcheck /health"]
-    WRK["worker · node dist/worker.js"]
-    MIG["migrate · node dist/migrate.js<br/>(runs once, then exits)"]
-    PG[("postgres · pgvector/pgvector:pg16<br/>volume pgdata")]
-    RD[("redis:7-alpine · AOF<br/>volume redisdata")]
+  subgraph Host["Single Linux host - docker compose (project: omniio)"]
+    WEB["web - Caddy<br/>auto-HTTPS - HSTS - nosniff<br/>console + widget static files"]
+    API["api - node dist/main.js :3000<br/>healthcheck /health"]
+    WRK["worker - node dist/worker.js"]
+    MIG["migrate - node dist/migrate.js<br/>(runs once, then exits)"]
+    PG[("postgres - pgvector/pgvector:pg16<br/>volume pgdata")]
+    RD[("redis:7-alpine - AOF<br/>volume redisdata")]
   end
 
   WEB -- "reverse_proxy" --> API
@@ -612,7 +612,7 @@ flowchart TB
   API -. "healthy" .-> WEB
 ```
 
-**Start-up order:** Postgres becomes healthy → `migrate` runs as the schema owner and exits 0 → the API and worker start as `omniio_app` → Caddy starts once the API is healthy.
+**Start-up order:** Postgres becomes healthy -> `migrate` runs as the schema owner and exits 0 -> the API and worker start as `omniio_app` -> Caddy starts once the API is healthy.
 
 **Scaling path:**
 
@@ -620,7 +620,7 @@ flowchart TB
 | --- | --- | --- |
 | API | Horizontally | Stateless apart from in-process circuit breakers |
 | Worker | Horizontally | BullMQ distributes jobs; `concurrency: 2` per process |
-| Postgres | Vertically + read replicas | Managed options need pgvector ≥ 0.8 for `hnsw.iterative_scan` |
+| Postgres | Vertically + read replicas | Managed options need pgvector >= 0.8 for `hnsw.iterative_scan` |
 | Redis | Managed instance | Holds only queues and counters, no source data |
 | Console / widget | CDN | Same-site with the API, because the refresh cookie is `SameSite=Strict` |
 
@@ -634,14 +634,14 @@ flowchart TB
 | Gemini chat model hangs | 8 s `AbortSignal` | Tier 2 excerpts | `tier1_timeout` |
 | Repeated model failures | breaker open | Tier 2, no model call | `tier1_circuit_open` |
 | Model returns bad JSON | schema parse | Tier 2 | `tier1_invalid_output` |
-| Model invents a citation | ids ⊄ retrieved | Tier 2 | `tier1_invalid_citation` |
+| Model invents a citation | cited ids not in retrieved set | Tier 2 | `tier1_invalid_citation` |
 | Answer not supported by its citations | grounding ratio | Tier 2 | `tier1_ungrounded` |
 | Daily budget spent | Redis counter | Tier 2 | `tier1_budget_exhausted` |
 | Embedding API down or slow | exception / 4 s budget / breaker | Tier 3 FAQ or hand-off | `retrieval_failed` / `retrieval_timeout` / `retrieval_circuit_open` |
 | Nothing relevant indexed | similarity floor | Tier 3 | `no_relevant_context` |
 | Audit write fails | listener catch | Same answer | logged only |
-| Redis down | client error | Same answers; per-process rate limits; uploads saved as `failed` + Retry | `/health` → `degraded` |
-| Postgres down | client error | Widget: hand-off message + default theme | `/health` → 503 |
+| Redis down | client error | Same answers; per-process rate limits; uploads saved as `failed` + Retry | `/health` -> `degraded` |
+| Postgres down | client error | Widget: hand-off message + default theme | `/health` -> 503 |
 | PDF bomb or slow parse | worker-thread limits | Upload rejected; API stays responsive | document `error` |
 
 ---
