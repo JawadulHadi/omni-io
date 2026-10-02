@@ -1,0 +1,35 @@
+name: Publish Wiki
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-wiki:
+    name: Publish wiki from docs/wiki
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Publish wiki
+        env:
+          WIKI_URL: https://github.com/JawadulHadi/omni-io.wiki.git
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash docs/maintainers/publish-wiki.sh
