@@ -156,6 +156,8 @@ CI runs all of this on every push, against `pgvector/pgvector:pg16`, and builds 
 | [API reference](docs/api.md) | REST, GraphQL operations and roles, MCP tools, rate limits |
 | [Deployment](docs/deployment.md) | One-command Docker Compose deploy, topology, database roles, configuration checklist, operations |
 | [ADRs](docs/adr/) | Eight architecture decision records |
+| [Architecture diagrams](docs/gist/omni-io-01-architecture.md) | Context, containers, request pipeline, ladder, sequences, ER model, isolation layers, deployment |
+| [Review & path to production](docs/gist/omni-io-02-review-and-next-steps.md) | Oct 2026 review findings, M8ven listing assessment, phased go-live plan |
 | [Scaffold review](docs/reviews/2026-09-29-scaffold-review.md) | The 47 findings that took v0.1.0 to v1.0.0 |
 | [Changelog](CHANGELOG.md) | Every release, following Keep a Changelog |
 

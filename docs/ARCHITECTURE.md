@@ -4,11 +4,11 @@ Sep 28, 2026 (revised Sep 29, 2026 for v1.0.0) · @Jawad Ul Hadi
 
 > Related: [resilience ladder](resilience-ladder.md) · [multi-tenancy](multi-tenancy.md) · [API](api.md) · [deployment](deployment.md) · [ADRs](adr/) · [scaffold review](reviews/2026-09-29-scaffold-review.md)
 
-## 1. Why this version
+## 1. Overview
 
-The live `omniioo` repo was scaffolded with Lovable: fast to demo, but the stack (TanStack Start + Supabase-only) doesn't match the NestJS/PostgreSQL/GraphQL/BullMQ/Redis skill set the resume and case study lead with. This spec redesigns the same product — a multi-tenant AI support engine with a cited-answer → RAG-snippet → FAQ-floor resilience ladder — on a stack an interviewer can map directly onto "Backend Lead / Architect."
+Omni.io is a multi-tenant AI support engine with a cited-answer → RAG-snippet → FAQ-floor resilience ladder, built on NestJS, PostgreSQL + pgvector, GraphQL, BullMQ and Redis. The design goal is simple: when any dependency fails, the customer still gets a useful answer and the operator can see exactly why.
 
-It reuses only the product concept and data-model ideas from the original. This repository implements everything described here. Where the implementation made a deliberate trade-off, this document says so, and the [ADRs](adr/) record why.
+This repository implements everything described here. Where the implementation made a deliberate trade-off, this document says so, and the [ADRs](adr/) record why.
 
 **Who this is for:** (1) a hiring-manager-facing architecture doc to accompany the "Designing for AI Failure" case study, and (2) a build brief — Section 9 is a single prompt that hands this spec to an AI coding tool.
 
@@ -217,7 +217,6 @@ Stated limits:
 - **Observability:**
   - Tier-distribution and fallback-rate metrics with alerting — a rising Tier 2/3 share is the leading indicator of a provider or content problem.
   - Per-step latency from the decision trace, exported as OpenTelemetry spans.
-- **Cost ceilings:** per-workspace daily token budgets that force Tier 2 when exhausted, in addition to request rate limits.
 - **Shared circuit breaker:** today each API instance trips independently. A Redis-backed breaker would coordinate across instances.
 - **Evaluation:** labeled question sets per workspace, and threshold tuning from measured precision and recall.
 - **Codegen:** replace the hand-written GraphQL client types with graphql-codegen against the schema the API emits (`backend/schema.gql`).
@@ -250,7 +249,7 @@ MULTI-TENANCY & SECURITY (non-negotiable)
 - Every DB unit of work is a short transaction that sets app.workspace_id with set_config(..., true) from request-scoped context; throw if no workspace is set. Never hold a transaction across an LLM call.
 - Pre-tenant and cross-tenant operations (login, user's workspaces, widget key, live role, invite links, retention) go through SECURITY DEFINER functions with a pinned search_path.
 - Roles owner/admin/editor/viewer are checked against the live membership row on every request; no granting above your own role; owners protected.
-- Connector keys use AES-256-GCM with the row identity as AAD.
+- Store only SHA-256 hashes of refresh tokens, invite links and API tokens; show the plaintext once.
 - GDPR erasure: one transaction deletes the document, chunks and audit references; the file is deleted after commit, with retry.
 - Treat retrieved passages and widget questions as untrusted (delimited context, schema output, citation validation). The widget only sees documents marked public.
 
