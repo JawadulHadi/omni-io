@@ -138,7 +138,7 @@ Container platforms and managed databases, the configuration checklist and opera
 
 ```sh
 cd backend
-npm test            # 70 unit tests: every ladder branch, breakers, grounding, chunking, auth guard, prompt hygiene
+npm test            # 81 unit tests: every ladder branch, breakers, grounding, chunking, auth guard, prompt hygiene, MCP tools
 npm run test:e2e    # 16 tests against the real Postgres, as omniio_app: RLS, invite links, vector-search fallback, retention
 cd ../frontend
 npm run build       # typecheck + console + standalone widget.js
@@ -156,8 +156,12 @@ CI runs all of this on every push, against `pgvector/pgvector:pg16`, and builds 
 | [API reference](docs/api.md) | REST, GraphQL operations and roles, MCP tools, rate limits |
 | [Deployment](docs/deployment.md) | One-command Docker Compose deploy, topology, database roles, configuration checklist, operations |
 | [ADRs](docs/adr/) | Eight architecture decision records |
+| [Architecture diagrams](docs/gist/omni-io-architecture.md) | Context, containers, request pipeline, ladder, sequences, ER model, isolation layers, deployment |
+| [Production-readiness review](docs/reviews/2026-10-02-production-readiness-review.md) | Oct 2026 review findings, M8ven listing assessment, phased go-live plan |
 | [Scaffold review](docs/reviews/2026-09-29-scaffold-review.md) | The 47 findings that took v0.1.0 to v1.0.0 |
 | [Changelog](CHANGELOG.md) | Every release, following Keep a Changelog |
+| [Wiki](https://github.com/JawadulHadi/omni-io/wiki) | Getting started, MCP integration, troubleshooting, release process (source: [docs/wiki](docs/wiki/)) |
+| [Security policy](SECURITY.md) | Supported versions, private reporting, scope, deployment hardening checklist |
 
 ## Roadmap
 
