@@ -8,7 +8,7 @@ Scope:
 - The *Backend & Frontend Architecture Spec* (.docx, 28 Sept 2026).
 - The M8ven Trust Index listing and notification email (29 Sept / 2 Oct 2026).
 
-Part 1 of this gist, *System Architecture*, has the diagrams.
+The diagrams are in [System Architecture](../gist/omni-io-architecture.md), the public gist document. This review is the internal companion to it and is not part of the gist.
 
 ---
 
@@ -56,17 +56,17 @@ Severity: 🔴 must fix before production · 🟠 fix soon · 🟡 improvement �
 | # | Sev | Finding | Action |
 | --- | --- | --- | --- |
 | D1 | ✅ | The spec (both the .docx and `docs/ARCHITECTURE.md`) opened by comparing the project to an earlier no-code scaffold | Removed. Both now open with a neutral product overview |
-| D2 | 🟠 | The .docx spec no longer matches the code: **Drizzle** (code uses plain SQL migrations) · **TenantInterceptor** (code uses AsyncLocalStorage + `DbService.tenant()`) · **MCP over SSE** (code uses Streamable HTTP) · **AES-256-GCM connector keys** (removed as unused) · **`inviteMember`** (replaced by single-use invite links) · **"urql or Apollo", Zustand** (urql chosen, no Zustand) | Use the repo `docs/ARCHITECTURE.md` and this gist as the canonical spec. Retire the .docx, or regenerate it from the Markdown before sending it to anyone |
+| D2 | 🟠 | The .docx spec no longer matches the code: **Drizzle** (code uses plain SQL migrations) · **TenantInterceptor** (code uses AsyncLocalStorage + `DbService.tenant()`) · **MCP over SSE** (code uses Streamable HTTP) · **AES-256-GCM connector keys** (removed as unused) · **`inviteMember`** (replaced by single-use invite links) · **"urql or Apollo", Zustand** (urql chosen, no Zustand) | Use the repo `docs/ARCHITECTURE.md` and the architecture gist as the canonical spec. Retire the .docx, or regenerate it from the Markdown before sending it to anyone |
 | D3 | ✅ | The `ARCHITECTURE.md` build prompt still required AES-256-GCM connector keys, and its "what's next" listed cost ceilings, which have already shipped | Fixed |
-| D4 | 🟡 | The README claims "70 unit tests". This could not be re-verified in review on Node 22: the suites need Node ≥ 24.9, and `engines` says `>=22.12` | Raise `engines.node` to `>=24.9` for development, or note the split in `engines` |
+| D4 | 🟡 | The unit tests need Node ≥ 24.9: on Node 22 three suites fail to load (`require(esm)`). `engines` says `>=22.12`, which is true for running the app but not for the tests. On Node 24 the claim checks out: 70 tests before this review, 81 now | Add a note to `CONTRIBUTING.md`, or a `preinstall` check, so contributors on Node 22 aren't confused |
 
 ### 3.2 Code
 
 | # | Sev | Finding | Action |
 | --- | --- | --- | --- |
-| C1 | 🟠 | The MCP tools declare no annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). Clients can't warn users, and OpenAI's connector directory rejects tools without all four | `list_*`: `true / false / true / false`. `ask_question`: `false / false / false / true`, because it writes an audit row, spends budget and calls Gemini |
-| C2 | 🟠 | No test references any MCP tool by name, so the membership check in `inWorkspace()` is untested at the MCP layer | Add `mcp.tools.spec.ts`: a non-member gets `isError`, a member gets a scoped list, and `ask_question` respects `AskLimiter` |
-| C3 | 🟡 | `list_workspaces` has no `inputSchema` | Declare an empty schema, so every tool advertises validated input |
+| C1 | ✅ | The MCP tools declare no annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). Clients can't warn users, and OpenAI's connector directory rejects tools without all four | `list_*`: `true / false / true / false`. `ask_question`: `false / false / false / true`, because it writes an audit row, spends budget and calls Gemini. **Done**, and each tool also got a `title` |
+| C2 | ✅ | No test references any MCP tool by name, so the membership check in `inWorkspace()` is untested at the MCP layer | Add `mcp.tools.spec.ts`: a non-member gets `isError`, a member gets a scoped list, and `ask_question` respects `AskLimiter`. **Done**: 11 tests run through a real MCP client over an in-memory transport |
+| C3 | ✅ | `list_workspaces` has no `inputSchema` | Declare an empty schema, so every tool advertises validated input. **Done** |
 | C4 | 🟡 | Circuit breakers are in-process, so N API instances need N × 5 failures to trip | Already on the roadmap: a Redis-backed shared breaker. Not needed for a single-instance launch |
 
 ### 3.3 Operations and security
@@ -99,14 +99,14 @@ M8ven is a third-party directory that crawls public GitHub repos containing MCP 
 | Scanned commit **`42b8f5b`** | **Stale** | That is a Dependabot merge from *before* PR #11, which is the snapshot whose build was broken. The current `main` is 3 commits later and includes the deploy-readiness and security fixes |
 | ✅ No credential exfiltration, sensitive file access or obfuscation | Correct | — |
 | ✅ Open source with licence and README | Correct | — |
-| Tool annotations missing (4/4 tools) | **Valid** | Finding C1. About 10 lines of code |
-| Input schemas on 3/4 tools | **Valid, minor** | Finding C3. `list_workspaces` takes no arguments, so declare an empty schema |
-| Tool test coverage 0/4 | **Valid** | Finding C2 |
+| Tool annotations missing (4/4 tools) | **Valid, fixed** | Finding C1 |
+| Input schemas on 3/4 tools | **Valid, fixed** | Finding C3 |
+| Tool test coverage 0/4 | **Valid, fixed** | Finding C2 |
 | Stale deps: `class-transformer@0.5.1`, `reflect-metadata@0.2.2` | **False positive** | Both are the **latest published versions** (`npm view` confirms). They are mature, not stale, and both are NestJS peer dependencies. Dispute it |
 
 ### Recommendation
 
-1. **Fix C1–C3 first** (about an hour of work), then push. The rescan should clear three of the four quality suggestions.
+1. **C1–C3 are fixed.** Once they are merged to `main`, M8ven's next scan should clear three of the four quality suggestions. Claiming or connecting Live triggers a rescan sooner.
 2. **Claim the listing.** It is free and verifies with an email from the repo's git history. The benefit is that you hear first about any security finding on your own project. Before you claim, check that the link goes to `m8ven.ai`, and never enter a password there.
 3. **Dispute the dependency finding** with the `npm view` evidence.
 4. **Badge: wait.** A visible **"C"** on a portfolio README is a weak signal to a recruiter skimming for 7 seconds. Add the badge only once the grade improves, or use `?variant=verified`, which shows verification without the letter grade.
@@ -128,7 +128,7 @@ flowchart LR
 
 ### Phase 0 — Release hygiene (days 1–2)
 
-- [ ] Add MCP tool annotations, an empty schema on `list_workspaces`, and `mcp.tools.spec.ts` (C1–C3)
+- [x] Add MCP tool annotations, an empty schema on `list_workspaces`, and `mcp.tools.spec.ts` (C1–C3)
 - [ ] Run `npm test` + `npm run test:e2e` on Node 24 and confirm CI is green on `main`
 - [ ] Cut **`v1.1.0`** from `[Unreleased]` (O2)
 - [ ] Add a CI job that publishes `ghcr.io/jawadulhadi/omniio-api:<tag>` and `omniio-web:<tag>` on tag push (O5)
@@ -213,4 +213,5 @@ flowchart TB
   - Removed the stale AES-256-GCM connector-key requirement from the build prompt.
   - Removed the already-shipped cost-ceiling item from "what's next".
 - The .docx spec: the same comparison was removed from the overview. The remaining drift (D2) is listed above; I left the rest of the content unchanged.
-- Added this two-part gist: *System Architecture* and this *Review & Path to Production*.
+- Added the public architecture gist document and this internal review.
+- MCP (C1–C3): every tool now has a `title`, all four annotation hints and an input schema. Added `mcp.tools.spec.ts` (11 tests). The full unit suite passes on Node 24: 81 tests in 8 suites.

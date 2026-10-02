@@ -576,6 +576,8 @@ sequenceDiagram
 | `list_faqs` | `workspaceId` | Read-only: Tier 3 FAQ entries |
 | `ask_question` | `workspaceId`, `query` (≤ 1,000 chars) | Runs the ladder. It calls Gemini, writes an audit row and is rate-limited per user |
 
+Every tool declares a title, an input schema and all four MCP annotation hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), so clients can warn before a tool with side effects runs.
+
 The transport is Streamable HTTP in stateless mode (HTTP+SSE is deprecated in the MCP spec), so there are no sessions to store or scale. OAuth 2.1 is on the roadmap.
 
 ---
@@ -669,4 +671,4 @@ flowchart TB
 
 ---
 
-*Part 2 of this gist covers the review findings and the path to production.*
+*Source code, ADRs and full documentation: [github.com/JawadulHadi/omni-io](https://github.com/JawadulHadi/omni-io).*

@@ -45,6 +45,7 @@ Deployment hardening. The build is green again on the upgraded dependencies, and
 - The API refuses to start in production with `COOKIE_SECURE=false` or the example `JWT_SECRET`.
 - **Deployment:** `deploy/` has a backend image (API, worker, migrations), a Caddy web image (console plus same-origin API proxy with automatic HTTPS) and a Docker Compose file for one server. CI now builds both images.
 - Migration `0004_hardening.sql`, with integration tests for invitations, the vector-search fallback and retention.
+- **MCP tool metadata.** Every tool now declares a `title`, an input schema and all four annotation hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). `ask_question` is marked as not read-only and open-world, because it writes an audit row, spends the model-call budget and calls the provider. `mcp.tools.spec.ts` exercises all four tools through a real MCP client.
 
 ### Changed
 
