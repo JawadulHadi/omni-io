@@ -160,6 +160,8 @@ CI runs all of this on every push, against `pgvector/pgvector:pg16`, and builds 
 | [Production-readiness review](docs/reviews/2026-10-02-production-readiness-review.md) | Oct 2026 review findings, M8ven listing assessment, phased go-live plan |
 | [Scaffold review](docs/reviews/2026-09-29-scaffold-review.md) | The 47 findings that took v0.1.0 to v1.0.0 |
 | [Changelog](CHANGELOG.md) | Every release, following Keep a Changelog |
+| [Wiki](https://github.com/JawadulHadi/omni-io/wiki) | Getting started, MCP integration, troubleshooting, release process (source: [docs/wiki](docs/wiki/)) |
+| [Security policy](SECURITY.md) | Supported versions, private reporting, scope, deployment hardening checklist |
 
 ## Roadmap
 

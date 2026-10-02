@@ -4,7 +4,19 @@ All notable changes to Omni.io are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
-Deployment hardening. The build is green again on the upgraded dependencies, and the stack deploys with one command.
+### Planned
+
+- Tier-mix and latency metrics (OpenTelemetry) with alerting on fallback rate.
+- A Redis-backed circuit breaker shared across API instances.
+- A per-workspace evaluation set for tuning confidence and similarity thresholds.
+- Email verification, so invitations and Google sign-in can be bound to an address.
+- MCP OAuth 2.1 authorization.
+- GraphQL codegen for console types.
+- An S3/GCS driver for `BlobStorage`.
+
+## [1.1.0] - 2026-10-02
+
+Deployment hardening and security fixes. The build is green again on the upgraded dependencies, and the stack deploys with one command.
 
 ### Fixed
 
@@ -46,6 +58,11 @@ Deployment hardening. The build is green again on the upgraded dependencies, and
 - **Deployment:** `deploy/` has a backend image (API, worker, migrations), a Caddy web image (console plus same-origin API proxy with automatic HTTPS) and a Docker Compose file for one server. CI now builds both images.
 - Migration `0004_hardening.sql`, with integration tests for invitations, the vector-search fallback and retention.
 - **MCP tool metadata.** Every tool now declares a `title`, an input schema and all four annotation hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). `ask_question` is marked as not read-only and open-world, because it writes an audit row, spends the model-call budget and calls the provider. `mcp.tools.spec.ts` exercises all four tools through a real MCP client.
+- **Documentation.**
+  - An [architecture document](docs/gist/omni-io-architecture.md) with 14 Mermaid diagrams, ready to publish as a GitHub gist.
+  - A [production-readiness review](docs/reviews/2026-10-02-production-readiness-review.md) with a phased plan to go live.
+  - [Wiki pages](docs/wiki/) and a script to publish them.
+  - [Repository settings](docs/maintainers/repository-settings.md): description, topics, the release process and security settings.
 
 ### Changed
 
@@ -56,16 +73,6 @@ Deployment hardening. The build is green again on the upgraded dependencies, and
 ### Removed
 
 - `ConnectionsService`, `APP_USER_CONNECTION_KEY_SECRET` and the `app_user_connections` table. Nothing ever used them.
-
-### Planned
-
-- Tier-mix and latency metrics (OpenTelemetry) with alerting on fallback rate.
-- A Redis-backed circuit breaker shared across API instances.
-- A per-workspace evaluation set for tuning confidence and similarity thresholds.
-- Email verification, so invitations and Google sign-in can be bound to an address.
-- MCP OAuth 2.1 authorization.
-- GraphQL codegen for console types.
-- An S3/GCS driver for `BlobStorage`.
 
 ## [1.0.0] - 2026-09-29
 
@@ -196,7 +203,8 @@ The hardened backend. The scaffold now builds, migrates and boots, tenant isolat
 
 - It does not build, migrate or boot; RLS is not enforced; every question returns HTTP 500. See [the scaffold review](https://github.com/JawadulHadi/omni-io/blob/main/docs/reviews/2026-09-29-scaffold-review.md).
 
-[Unreleased]: https://github.com/JawadulHadi/omni-io/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/JawadulHadi/omni-io/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/JawadulHadi/omni-io/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/JawadulHadi/omni-io/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/JawadulHadi/omni-io/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/JawadulHadi/omni-io/releases/tag/v0.1.0

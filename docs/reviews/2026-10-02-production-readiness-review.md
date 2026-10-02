@@ -130,7 +130,7 @@ flowchart LR
 
 - [x] Add MCP tool annotations, an empty schema on `list_workspaces`, and `mcp.tools.spec.ts` (C1–C3)
 - [ ] Run `npm test` + `npm run test:e2e` on Node 24 and confirm CI is green on `main`
-- [ ] Cut **`v1.1.0`** from `[Unreleased]` (O2)
+- [x] Prepare **`v1.1.0`**: changelog, version bump and [release notes](../releases/v1.1.0.md). Tag it after merge (O2)
 - [ ] Add a CI job that publishes `ghcr.io/jawadulhadi/omniio-api:<tag>` and `omniio-web:<tag>` on tag push (O5)
 - [ ] Add a CSP header to the Caddyfile (O6)
 
@@ -215,3 +215,4 @@ flowchart TB
 - The .docx spec: the same comparison was removed from the overview. The remaining drift (D2) is listed above; I left the rest of the content unchanged.
 - Added the public architecture gist document and this internal review.
 - MCP (C1–C3): every tool now has a `title`, all four annotation hints and an input schema. Added `mcp.tools.spec.ts` (11 tests). The full unit suite passes on Node 24: 81 tests in 8 suites.
+- Release v1.1.0 prepared: the changelog is cut, versions are bumped, and the release notes, SECURITY.md update, wiki pages and repository-settings guide are written.
