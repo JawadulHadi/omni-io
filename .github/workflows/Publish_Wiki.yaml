@@ -1,0 +1,56 @@
+name: Publish Wiki
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Publish wiki
+        env:
+          WIKI_URL: https://github.com/JawadulHadi/omni-io.wiki.git
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          repo_root="$GITHUB_WORKSPACE"
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+
+          git clone --quiet --depth 1 "$WIKI_URL" "$work"
+
+          # Remove old wiki pages from the root of the wiki repo.
+          find "$work" -maxdepth 1 -name '*.md' -delete
+
+          # Copy current docs/wiki pages into the wiki repo.
+          shopt -s nullglob
+          files=("$repo_root"/docs/wiki/*.md)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No docs/wiki/*.md files found; nothing to publish."
+            exit 0
+          fi
+          cp "${files[@]}" "$work"/
+
+          cd "$work"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date."
+            exit 0
+          fi
+
+          git commit -m "Sync wiki from ${GITHUB_SHA::7}"
+          git push origin HEAD
+          echo "Wiki published: ${WIKI_URL%.git}"
