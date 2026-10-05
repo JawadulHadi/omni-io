@@ -18,9 +18,10 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work" "$work.err"' EXIT
 
 if [[ -n "$token" ]]; then
+  basic="$(printf 'x-access-token:%s' "$token" | base64 | tr -d '\n')"
   export GIT_CONFIG_COUNT=1
   export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
-  export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$token" | base64 | tr -d '\n')"
+  export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic"
 fi
 
 if ! git clone --quiet --depth 1 "$wiki_url" "$work" 2>"$work.err"; then

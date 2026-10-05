@@ -24,6 +24,13 @@ export class HealthController {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
+  /** Liveness only, no dependencies: for platform health checks that poll constantly (Render), so they don't keep a scale-to-zero database awake. */
+  @Public()
+  @Get('live')
+  live() {
+    return { status: 'ok' };
+  }
+
   @Public()
   @Get()
   async check(@Res({ passthrough: true }) res: Response) {

@@ -132,7 +132,13 @@ cp .env.example .env               # DOMAIN, two DB passwords, JWT_SECRET, GEMIN
 docker compose up -d --build       # migrations run first; then https://<DOMAIN>
 ```
 
-Container platforms and managed databases, the configuration checklist and operations: **[docs/deployment.md](docs/deployment.md)**.
+On a fresh Ubuntu server, one command does all of it, including Docker and the firewall:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/JawadulHadi/omni-io/main/deploy/install.sh | sudo bash -s -- --domain <your-hostname>
+```
+
+**Free hosting, no credit card:** Render + Neon + Redis Cloud, with a one-click Blueprint ([`render.yaml`](render.yaml)): **[docs/deploy-render-free.md](docs/deploy-render-free.md)**. With a card for verification, an Oracle Cloud Always Free VM runs the full stack without sleeping: **[docs/deploy-oracle-free.md](docs/deploy-oracle-free.md)**. Container platforms and managed databases, the configuration checklist and operations: **[docs/deployment.md](docs/deployment.md)**.
 
 ## Testing
 

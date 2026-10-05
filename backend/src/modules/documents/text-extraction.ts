@@ -4,9 +4,10 @@ import { Worker } from 'node:worker_threads';
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
-const PDF_TIMEOUT_MS = 30_000;
-const PDF_HEAP_MB = 512;
-const MAX_PARALLEL_PDFS = 2;
+// Validated with the rest of the environment (config/env.ts); read here because this isn't a provider.
+const PDF_TIMEOUT_MS = Number(process.env.PDF_TIMEOUT_MS) || 30_000;
+const PDF_HEAP_MB = Number(process.env.PDF_MAX_HEAP_MB) || 512;
+const MAX_PARALLEL_PDFS = Number(process.env.PDF_MAX_PARALLEL) || 2;
 const UNREADABLE = 'Could not read that PDF (it may be encrypted or corrupted)';
 
 const TYPES: Record<string, string> = {
@@ -36,8 +37,9 @@ export async function extractText(data: Buffer, mime: string): Promise<string> {
 
 /**
  * PDF parsing is CPU-heavy and runs on untrusted input, so it gets its own
- * thread with a time limit and a heap cap, and at most two run at once per
- * process. Any failure — corrupt file, timeout, out of memory — is a 400.
+ * thread with a time limit and a heap cap, and only a few run at once per
+ * process (PDF_TIMEOUT_MS, PDF_MAX_HEAP_MB, PDF_MAX_PARALLEL). Any failure —
+ * corrupt file, timeout, out of memory — is a 400.
  */
 function extractPdf(data: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
