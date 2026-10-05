@@ -15,7 +15,7 @@ import { TenantContext } from './tenant-context';
         // A server-side statement timeout, so a query abandoned by a request timeout can't pin a connection.
         const pool = new Pool({
           connectionString: cfg.get('DATABASE_URL', { infer: true }),
-          max: 20,
+          max: cfg.get('DB_POOL_MAX', { infer: true }),
           connectionTimeoutMillis: 5_000,
           statement_timeout: cfg.get('DB_STATEMENT_TIMEOUT_MS', { infer: true }),
         });

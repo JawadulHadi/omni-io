@@ -39,10 +39,7 @@ async function main() {
       .sort()
       .filter((f) => !applied.has(f));
 
-    if (pending.length === 0) {
-      console.log('No pending migrations.');
-      return;
-    }
+    if (pending.length === 0) console.log('No pending migrations.');
     for (const file of pending) {
       const sql = readFileSync(join(dir, file), 'utf8');
       await client.query('begin');
@@ -56,10 +53,24 @@ async function main() {
         throw new Error(`${file} failed: ${(err as Error).message}`);
       }
     }
+    await enableAppLogin(client);
   } finally {
     await client.query('select pg_advisory_unlock($1)', [LOCK_ID]).catch(() => undefined);
     await client.end();
   }
+}
+
+/**
+ * Managed Postgres (Neon, Supabase, ...) has no init script to give omniio_app a
+ * login — migration 0003 creates it NOLOGIN. With APP_DB_PASSWORD set, set it here,
+ * on every run, so rotating the password is just changing the variable.
+ */
+async function enableAppLogin(client: Client) {
+  const password = process.env.APP_DB_PASSWORD;
+  if (!password) return;
+  const { rows } = await client.query(`select format('alter role omniio_app with login password %L', $1::text) as sql`, [password]);
+  await client.query(rows[0].sql);
+  console.log('omniio_app can log in');
 }
 
 main().catch((err) => {

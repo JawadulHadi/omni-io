@@ -2,6 +2,8 @@
 
 ## Quick start: one server with Docker Compose
 
+On a fresh Ubuntu or Debian server, [`deploy/install.sh`](../deploy/install.sh) does everything below, including installing Docker and opening the host firewall. For a free server, follow [Free hosting on Oracle Cloud](deploy-oracle-free.md). Without a credit card, use [Render + Neon + Redis Cloud](deploy-render-free.md), which runs everything in one container from [`deploy/render.Dockerfile`](../deploy/render.Dockerfile).
+
 [`deploy/`](../deploy/) runs the whole stack on a single Linux server: Postgres 16 with pgvector, Redis, the API, the ingestion worker, and Caddy. Caddy serves the console and the widget, proxies the API on the same origin, and gets the HTTPS certificate automatically.
 
 1. Point a DNS record (for example `support.example.com`) at the server, and open ports 80 and 443.
@@ -20,26 +22,26 @@ Migrations run automatically, as the schema owner, before the API and worker sta
 
 To try it on your own machine, set `DOMAIN=localhost`. Caddy then uses its own local certificate authority, so the browser warns once.
 
-| Service | Image | Notes |
-| --- | --- | --- |
+| Service      | Image                      | Notes                                                                                      |
+| ------------ | -------------------------- | ------------------------------------------------------------------------------------------ |
 | `postgres` | `pgvector/pgvector:pg16` | `deploy/initdb/` creates the `omniio_app` role from `APP_DB_PASSWORD` on first start |
-| `redis` | `redis:7-alpine` | Append-only file on a volume |
-| `migrate` | `deploy/api.Dockerfile` | `node dist/migrate.js`, then exits |
-| `api` | `deploy/api.Dockerfile` | `node dist/main.js` on port 3000, inside the network only |
-| `worker` | `deploy/api.Dockerfile` | `node dist/worker.js` |
-| `web` | `deploy/web.Dockerfile` | Caddy on 80 and 443 |
+| `redis`    | `redis:7-alpine`         | Append-only file on a volume                                                               |
+| `migrate`  | `deploy/api.Dockerfile`  | `node dist/migrate.js`, then exits                                                       |
+| `api`      | `deploy/api.Dockerfile`  | `node dist/main.js` on port 3000, inside the network only                                |
+| `worker`   | `deploy/api.Dockerfile`  | `node dist/worker.js`                                                                    |
+| `web`      | `deploy/web.Dockerfile`  | Caddy on 80 and 443                                                                        |
 
 The two Dockerfiles also work unchanged on container platforms (Render, Railway, Fly.io, Cloud Run, ECS). Run the API, worker and migration from the same backend image with the three commands above. Provide Postgres with pgvector 0.8 or later and Redis 7 as managed services, and either run the web image or host `frontend/dist` on a CDN.
 
 ## Topology
 
-| Component | Runs | Scales |
-| --- | --- | --- |
-| API (`node dist/main.js`) | GraphQL, REST, widget, MCP | Horizontally. Stateless apart from in-process circuit breakers |
-| Worker (`node dist/worker.js`) | Chunking, embedding, the retention sweep | Horizontally. BullMQ distributes jobs; `concurrency: 2` per process |
-| PostgreSQL ≥ 16 with **pgvector ≥ 0.8** | All data and vectors | Vertically, plus read replicas if needed |
-| Redis ≥ 7 | Queue, rate-limit counters, budgets, progress events | — |
-| Static hosting | `frontend/dist/` (console, hosted widget page, `widget.js`) | A CDN |
+| Component                                      | Runs                                                            | Scales                                                               |
+| ---------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| API (`node dist/main.js`)                    | GraphQL, REST, widget, MCP                                      | Horizontally. Stateless apart from in-process circuit breakers       |
+| Worker (`node dist/worker.js`)               | Chunking, embedding, the retention sweep                        | Horizontally. BullMQ distributes jobs;`concurrency: 2` per process |
+| PostgreSQL ≥ 16 with**pgvector ≥ 0.8** | All data and vectors                                            | Vertically, plus read replicas if needed                             |
+| Redis ≥ 7                                     | Queue, rate-limit counters, budgets, progress events            | —                                                                   |
+| Static hosting                                 | `frontend/dist/` (console, hosted widget page, `widget.js`) | A CDN                                                                |
 
 Each API instance runs its own BullMQ `QueueEvents` listener, so live ingestion progress reaches subscribers on any instance with no extra pub/sub.
 
@@ -110,10 +112,12 @@ Create a personal access token under **API tokens** in the console, then point t
 
 - **Health:** `GET /health` returns `{ status, checks: { database, redis } }`. It returns 200 while Postgres answers, with `degraded` if Redis is down: every answer tier still works, but uploads can't be queued. It returns 503 only without Postgres. Point load-balancer checks at it.
 - **Failure behaviour:**
+
   - **Redis down:** rate limits and budgets fall back to per-process counters, and uploads are saved as `failed` with a Retry button.
   - **Postgres down:** the widget answers with the hand-off message rather than an error.
   - **Embedding or model provider down:** the ladder degrades, behind timeouts and circuit breakers.
 - **Watch the tier mix.** A rising share of Tier 2 or Tier 3 is the earliest sign of trouble:
+
   - a provider outage: `tier1_model_error`, `tier1_timeout`, `tier1_circuit_open`, `retrieval_timeout`, `retrieval_circuit_open`;
   - an exhausted budget: `tier1_budget_exhausted`;
   - a content gap: `no_relevant_context`.

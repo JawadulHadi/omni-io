@@ -82,6 +82,10 @@ jobs:
         run: docker build -f deploy/api.Dockerfile -t omniio-api:ci .
       - name: Web image (console + Caddy)
         run: docker build -f deploy/web.Dockerfile -t omniio-web:ci .
+      - name: Single-container image (Render)
+        run: docker build -f deploy/render.Dockerfile -t omniio-render:ci .
+      - name: Shell scripts pass ShellCheck
+        run: shellcheck deploy/install.sh deploy/render-start.sh deploy/initdb/01-app-role.sh docs/maintainers/publish-wiki.sh
       - name: Compose file is valid
         working-directory: deploy
         run: |

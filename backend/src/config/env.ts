@@ -21,6 +21,16 @@ export const envSchema = z
     REDIS_URL: z.string().min(1),
 
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+    DB_POOL_MAX: z.coerce.number().int().positive().default(20), // connections per process
+
+    // Single-container hosting (e.g. Render's free plan): one process serves the API, the
+    // built console from STATIC_DIR on the same origin, and runs the ingestion worker.
+    STATIC_DIR: z.string().optional(),
+    RUN_WORKER_IN_PROCESS: bool('false'),
+    // PDF parsing limits (see text-extraction.ts); lower them on small instances.
+    PDF_MAX_HEAP_MB: z.coerce.number().int().min(64).default(512),
+    PDF_MAX_PARALLEL: z.coerce.number().int().positive().default(2),
+    PDF_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
 
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
     COOKIE_SECURE: bool('false'),
