@@ -2,7 +2,7 @@
 
 You need **Node 24 LTS** and **Docker**. The app runs on Node 22.12+, but the unit tests need 24.9+.
 
-```sh
+```json
 git clone https://github.com/JawadulHadi/omni-io.git && cd omni-io
 
 cd backend
@@ -38,7 +38,7 @@ Set `AI_PROVIDER=gemini` and `GEMINI_API_KEY` in `backend/.env`. Then set the si
 
 ## Running the tests
 
-```sh
+```JSON
 cd backend
 npm test            # unit tests: ladder branches, breakers, grounding, chunking, auth guard, prompt, MCP tools
 npm run test:e2e    # against the real Postgres, as omniio_app: RLS, invitations, vector-search fallback, retention
