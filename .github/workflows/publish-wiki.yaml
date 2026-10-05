@@ -4,10 +4,16 @@ on:
   push:
     branches:
       - main
+    # Only when the wiki sources change, not on every merge to main.
+    paths:
+      - docs/wiki/**
+      - docs/maintainers/publish-wiki.sh
+      - .github/workflows/publish-wiki.yaml
   workflow_dispatch:
 
+# Pushing to the <repo>.wiki.git repository needs write access to contents.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: wiki-publish-${{ github.ref }}
@@ -20,8 +26,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Configure Git
         run: |
@@ -30,6 +34,6 @@ jobs:
 
       - name: Publish wiki
         env:
-          WIKI_URL: https://github.com/JawadulHadi/omni-io.wiki.git
+          WIKI_URL: https://github.com/${{ github.repository }}.wiki.git
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash docs/maintainers/publish-wiki.sh
