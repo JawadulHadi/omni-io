@@ -18,7 +18,7 @@ Expect about 30 minutes for the whole setup.
 2. Create a project. Pick the region closest to where Render will run (Frankfurt, or US East/West).
 3. Open **Connect** and turn **Connection pooling off**. Migrations need a direct connection.
 4. Copy the connection string. It looks like `postgresql://neondb_owner:…@ep-xxx.eu-central-1.aws.neon.tech/neondb?sslmode=require`.
-   - If it ends with `&channel_binding=require`, delete that part.
+   - Note the region in the host name (for example `us-east-2`). Render should run in the matching region: `render.yaml` uses `ohio`, which sits next to Neon's `us-east-2`. If your Neon project is elsewhere, change `region` (Render offers `oregon`, `ohio`, `virginia`, `frankfurt`, `singapore`).
    - Keep it somewhere private. It's the database owner's password.
 
 You don't need to create tables, users or extensions. Omni.io's migrations do all of it on first start, including the restricted `omniio_app` role the app connects as.
