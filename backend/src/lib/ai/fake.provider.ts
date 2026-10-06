@@ -55,6 +55,8 @@ const contentWords = (text: string) =>
     .split(/[^\p{L}\p{N}]+/u)
     .filter((t) => t.length > 1 && !STOPWORDS.has(t));
 
+const MAX_HASH_INPUT_CHARS = 8_192;
+
 export function hashEmbed(text: string): number[] {
   const vec = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
   const tokens = contentWords(text);
@@ -67,9 +69,12 @@ export function hashEmbed(text: string): number[] {
 }
 
 function fnv1a(s: string): number {
+  const str = String(s);
+  const limit = Math.min(str.length, MAX_HASH_INPUT_CHARS);
+
   let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
+  for (let i = 0; i < limit; i++) {
+    h ^= str.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
   return h >>> 0;
