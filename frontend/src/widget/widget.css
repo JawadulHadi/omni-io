@@ -1,0 +1,261 @@
+/*
+ * Plain CSS, not Tailwind: this ships inside a Shadow DOM on customers' pages,
+ * where Tailwind v4's @property-based utilities don't register. Everything is
+ * prefixed so the hosted page (no shadow root) can't collide either.
+ */
+:host {
+  all: initial;
+}
+
+.omniio-root,
+.omniio-page {
+  --omniio-bg: #ffffff;
+  --omniio-fg: #111827;
+  --omniio-muted: #6b7280;
+  --omniio-border: #e5e7eb;
+  --omniio-soft: #f3f4f6;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--omniio-fg);
+  box-sizing: border-box;
+}
+
+@media (prefers-color-scheme: dark) {
+  .omniio-root,
+  .omniio-page {
+    --omniio-bg: #18181b;
+    --omniio-fg: #f4f4f5;
+    --omniio-muted: #a1a1aa;
+    --omniio-border: #3f3f46;
+    --omniio-soft: #27272a;
+  }
+}
+
+.omniio-root *,
+.omniio-page * {
+  box-sizing: border-box;
+}
+
+.omniio-root {
+  position: fixed;
+  bottom: 20px;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.omniio-right {
+  right: 20px;
+  align-items: flex-end;
+}
+.omniio-left {
+  left: 20px;
+  align-items: flex-start;
+}
+
+.omniio-launcher {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--omniio-primary);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+.omniio-launcher:focus-visible,
+.omniio-send:focus-visible,
+.omniio-icon-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--omniio-primary) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.omniio-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(370px, calc(100vw - 40px));
+  height: min(560px, calc(100vh - 110px));
+  background: var(--omniio-bg);
+  border: 1px solid var(--omniio-border);
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.18);
+  overflow: hidden;
+}
+
+.omniio-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--omniio-soft);
+}
+.omniio-panel-page {
+  width: min(560px, 100%);
+  height: min(720px, calc(100vh - 32px));
+}
+
+.omniio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--omniio-primary);
+  color: #fff;
+}
+.omniio-title {
+  font-weight: 600;
+}
+.omniio-icon-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.omniio-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.omniio-bubble {
+  max-width: 85%;
+  padding: 9px 12px;
+  border-radius: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.omniio-bubble p {
+  margin: 0;
+}
+.omniio-bot {
+  align-self: flex-start;
+  background: var(--omniio-soft);
+  border-bottom-left-radius: 4px;
+}
+.omniio-user {
+  align-self: flex-end;
+  background: var(--omniio-primary);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.omniio-error {
+  color: #b91c1c;
+}
+
+.omniio-sources {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--omniio-muted);
+}
+.omniio-sources summary {
+  cursor: pointer;
+}
+.omniio-sources ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.omniio-sources li {
+  display: grid;
+  gap: 2px;
+}
+.omniio-sources strong {
+  color: var(--omniio-fg);
+}
+
+.omniio-typing {
+  display: flex;
+  gap: 4px;
+}
+.omniio-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--omniio-muted);
+  animation: omniio-bounce 1s infinite ease-in-out;
+}
+.omniio-typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.omniio-typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes omniio-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .omniio-typing span {
+    animation: none;
+  }
+}
+
+.omniio-muted {
+  margin: 0;
+  color: var(--omniio-muted);
+}
+.omniio-banner,
+.omniio-notice {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+}
+.omniio-notice {
+  margin: 0 16px 8px;
+}
+
+.omniio-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--omniio-border);
+}
+.omniio-input {
+  flex: 1;
+  resize: none;
+  max-height: 120px;
+  padding: 9px 12px;
+  border: 1px solid var(--omniio-border);
+  border-radius: 10px;
+  background: var(--omniio-bg);
+  color: var(--omniio-fg);
+  font: inherit;
+}
+.omniio-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--omniio-primary) 40%, transparent);
+  border-color: transparent;
+}
+.omniio-send {
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--omniio-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.omniio-send:disabled,
+.omniio-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

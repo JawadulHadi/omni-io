@@ -1,0 +1,6 @@
+* @JawadulHadi
+
+# Security-critical paths
+/backend/migrations/ @JawadulHadi
+/backend/src/db/ @JawadulHadi
+/backend/src/common/guards/ @JawadulHadi

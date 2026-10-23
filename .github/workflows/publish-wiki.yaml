@@ -1,0 +1,39 @@
+name: Publish Wiki
+
+on:
+  push:
+    branches:
+      - main
+    # Only when the wiki sources change, not on every merge to main.
+    paths:
+      - docs/wiki/**
+      - docs/maintainers/publish-wiki.sh
+      - .github/workflows/publish-wiki.yaml
+  workflow_dispatch:
+
+# Pushing to the <repo>.wiki.git repository needs write access to contents.
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-wiki:
+    name: Publish wiki from docs/wiki
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Publish wiki
+        env:
+          WIKI_URL: https://github.com/${{ github.repository }}.wiki.git
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash docs/maintainers/publish-wiki.sh

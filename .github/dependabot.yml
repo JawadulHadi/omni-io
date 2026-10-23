@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # Minor and patch updates only: major versions change APIs (Nest 12 went ESM-only,
+  # TypeScript 7 dropped its compiler API) and need a deliberate upgrade, not an auto-merge.
+  - package-ecosystem: npm
+    directory: /backend
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    groups:
+      nestjs:
+        patterns: ['@nestjs/*']
+      dev-dependencies:
+        dependency-type: development
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    groups:
+      react:
+        patterns: ['react', 'react-dom', '@types/react*']
+      dev-dependencies:
+        dependency-type: development
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule: { interval: monthly }
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']

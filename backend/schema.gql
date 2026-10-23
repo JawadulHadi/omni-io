@@ -1,0 +1,350 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+input AcceptInvitationInput {
+  token: String!
+}
+
+enum AnswerChannel {
+  console
+  mcp
+  widget
+}
+
+type AnswerLog {
+  channel: AnswerChannel!
+  citedChunkIds: [String!]!
+  confidence: Float
+  createdAt: DateTime!
+  decisionNote: String
+  decisionTrace: [TraceStepModel!]!
+  faqMatchId: ID
+  id: ID!
+  latencyMs: Int
+  model: String
+  query: String!
+  retrievedChunkIds: [String!]!
+  tier: AnswerTier!
+  tokensIn: Int
+  tokensOut: Int
+  topSimilarity: Float
+}
+
+type AnswerLogPage {
+  items: [AnswerLog!]!
+
+  """Tier distribution for the same filter, ignoring the tier filter itself"""
+  tierCounts: [TierCount!]!
+  total: Int!
+
+  """Total tokens (in + out) for the same filter"""
+  totalTokens: Int!
+}
+
+type AnswerResult {
+  answer: String!
+  answerId: ID!
+  citations: [CitationModel!]!
+  confidence: Float
+  faqMatchId: ID
+  latencyMs: Int!
+  tier: AnswerTier!
+  topSimilarity: Float
+  trace: [TraceStepModel!]!
+}
+
+"""Which rung of the resilience ladder produced the answer"""
+enum AnswerTier {
+  ai_answer
+  faq_floor
+  rag_snippets
+}
+
+input AnswersFilterInput {
+  channel: AnswerChannel
+  limit: Int! = 25
+  offset: Int! = 0
+  search: String
+  tier: AnswerTier
+}
+
+type ApiToken {
+  createdAt: DateTime!
+  expiresAt: DateTime
+  id: ID!
+  lastUsedAt: DateTime
+  name: String!
+}
+
+type CitationModel {
+  chunkId: ID!
+  documentId: ID!
+  documentTitle: String!
+  similarity: Float!
+  snippet: String!
+}
+
+input CreateApiTokenInput {
+  """Omit for a token that never expires"""
+  expiresInDays: Int
+  name: String!
+}
+
+input CreateDocumentFromTextInput {
+  content: String!
+  title: String!
+  visibility: Visibility! = internal
+}
+
+input CreateInvitationInput {
+  label: String
+  role: Role!
+}
+
+input CreateWorkspaceInput {
+  name: String!
+}
+
+type CreatedApiToken {
+  apiToken: ApiToken!
+
+  """Shown once. Use it as `Authorization: Bearer <token>` against /mcp."""
+  token: String!
+}
+
+type CreatedInvitation {
+  invitation: Invitation!
+
+  """
+  Shown once. Send the invite link containing it to the person you are inviting.
+  """
+  token: String!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Document {
+  byteSize: Int
+  chunkCount: Int!
+  createdAt: DateTime!
+  error: String
+  id: ID!
+  mimeType: String
+  sourceType: String!
+  status: DocumentStatus!
+  title: String!
+  updatedAt: DateTime!
+  visibility: Visibility!
+}
+
+enum DocumentStatus {
+  failed
+  pending
+  processing
+  ready
+}
+
+type Faq {
+  answer: String!
+  createdAt: DateTime!
+  id: ID!
+  keywords: [String!]!
+  question: String!
+
+  """Only public FAQs can answer anonymous widget visitors"""
+  visibility: Visibility!
+}
+
+input FaqInput {
+  answer: String!
+
+  """Words or phrases; matched as whole words against the question"""
+  keywords: [String!]!
+  question: String!
+  visibility: Visibility! = internal
+}
+
+type IngestionProgress {
+  chunkCount: Int
+  documentId: ID!
+  error: String
+  percent: Int!
+  status: IngestionStatus!
+}
+
+enum IngestionStatus {
+  failed
+  processing
+  ready
+  retrying
+}
+
+type Invitation {
+  createdAt: DateTime!
+  expiresAt: DateTime!
+  id: ID!
+
+  """Who it is meant for — informational only"""
+  label: String
+  role: Role!
+}
+
+input LadderSettingsInput {
+  """Tier 1 answers below this model confidence fall to Tier 2"""
+  confidenceThreshold: Float!
+
+  """Retrieval below this cosine similarity skips straight to Tier 3"""
+  similarityFloor: Float!
+}
+
+type Member {
+  createdAt: DateTime!
+  displayName: String
+  email: String!
+  role: Role!
+  userId: ID!
+}
+
+type Mutation {
+  """
+  Joins the workspace an invite link is for. Switch to it via POST /auth/switch-workspace.
+  """
+  acceptInvitation(input: AcceptInvitationInput!): WorkspaceMembership!
+  askQuestion(query: String!): AnswerResult!
+  createApiToken(input: CreateApiTokenInput!): CreatedApiToken!
+  createDocumentFromText(input: CreateDocumentFromTextInput!): Document!
+  createFaq(input: FaqInput!): Faq!
+
+  """A single-use invite link (7 days). Can't grant above your own role."""
+  createInvitation(input: CreateInvitationInput!): CreatedInvitation!
+
+  """
+  Creates a workspace you own. Switch to it via POST /auth/switch-workspace.
+  """
+  createWorkspace(input: CreateWorkspaceInput!): WorkspaceMembership!
+
+  """
+  GDPR erasure: deletes the document, its vectors, its original file and audit references
+  """
+  deleteDocument(id: ID!): Boolean!
+  deleteFaq(id: ID!): Boolean!
+  removeMember(userId: ID!): Boolean!
+  retryIngestion(id: ID!): Document!
+  revokeApiToken(id: ID!): Boolean!
+  revokeInvitation(id: ID!): Boolean!
+  rotateWidgetKey: WidgetConfig!
+  setDocumentVisibility(id: ID!, visibility: Visibility!): Document!
+  updateFaq(id: ID!, input: FaqInput!): Faq!
+  updateLadderSettings(input: LadderSettingsInput!): Workspace!
+  updateMemberRole(input: UpdateMemberRoleInput!): Member!
+  updateWidgetTheme(input: WidgetThemeInput!): WidgetConfig!
+}
+
+type Query {
+  answers(filter: AnswersFilterInput): AnswerLogPage!
+  apiTokens: [ApiToken!]!
+  documents: [Document!]!
+  faqs: [Faq!]!
+
+  """Pending invitations to the current workspace"""
+  invitations: [Invitation!]!
+  members: [Member!]!
+  myWorkspaces: [WorkspaceMembership!]!
+  systemInfo: SystemInfo!
+  widgetConfig: WidgetConfig!
+
+  """The workspace the current access token is scoped to"""
+  workspace: Workspace!
+}
+
+enum Role {
+  admin
+  editor
+  owner
+  viewer
+}
+
+type Subscription {
+  ingestionProgress: IngestionProgress!
+}
+
+type SystemInfo {
+  aiProvider: String!
+  chatModel: String!
+  embeddingModel: String!
+  googleOAuth: Boolean!
+}
+
+type TierCount {
+  count: Int!
+  tier: AnswerTier!
+}
+
+enum TraceOutcome {
+  failed
+  ok
+  rejected
+  skipped
+}
+
+type TraceStepModel {
+  detail: String
+  ms: Int!
+  outcome: TraceOutcome!
+  step: String!
+}
+
+input UpdateMemberRoleInput {
+  role: Role!
+  userId: ID!
+}
+
+"""public documents are the only ones the anonymous widget can retrieve"""
+enum Visibility {
+  internal
+  public
+}
+
+type WidgetConfig {
+  """Documents the widget can draw on (visibility = public)"""
+  publicDocumentCount: Int!
+  rotatedAt: DateTime!
+  theme: WidgetTheme!
+
+  """Public, rotatable key embedded in customer pages"""
+  widgetKey: String!
+}
+
+type WidgetTheme {
+  greeting: String!
+  position: String!
+  primaryColor: String!
+  title: String!
+}
+
+input WidgetThemeInput {
+  greeting: String!
+  position: String!
+  primaryColor: String!
+  title: String!
+}
+
+type Workspace {
+  confidenceThreshold: Float!
+  createdAt: DateTime!
+  id: ID!
+  name: String!
+  plan: String!
+  similarityFloor: Float!
+  widgetKey: String!
+}
+
+type WorkspaceMembership {
+  name: String!
+  role: Role!
+  workspaceId: ID!
+}

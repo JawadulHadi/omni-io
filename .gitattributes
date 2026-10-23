@@ -1,0 +1,10 @@
+# Normalise line endings in the repository; check out with LF everywhere.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+
+# Keep lockfiles out of diffs and language stats.
+package-lock.json linguist-generated=true -diff
+backend/schema.gql linguist-generated=true
