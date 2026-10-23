@@ -1,6 +1,6 @@
 # The resilience ladder
 
-The ladder is the core promise of Omni.io: **every question gets an answer, and the answer is never worse than it has to be.** When the model, the embedding API or the database misbehaves, quality steps down one rung instead of the customer seeing an error.
+The ladder is the core promise of Omni.io: **every q`uestion gets an answer, and the answer is never worse than it has to be.** When the model, the embedding API or the database misbehaves, quality steps down one rung instead of the customer seeing an error.
 
 The whole ladder is one method, [`AnswerService.askQuestion`](../backend/src/modules/answer/answer.service.ts), and it never throws. The only exception is a call made with no tenant in context, which is a programming error, not a runtime failure.
 
@@ -24,11 +24,11 @@ flowchart TD
 
 ## The rungs
 
-| Tier | Name | What the customer gets | Depends on |
-| --- | --- | --- | --- |
-| 1 | `ai_answer` | A model-written answer and the passages it cites | Embeddings, vector search, the chat model |
-| 2 | `rag_snippets` | Up to three retrieved passages, verbatim | Embeddings, vector search |
-| 3 | `faq_floor` | A keyword-matched FAQ answer, or a human hand-off message | Postgres only, or nothing at all |
+| Tier | Name             | What the customer gets                                    | Depends on                                |
+| ---- | ---------------- | --------------------------------------------------------- | ----------------------------------------- |
+| 1    | `ai_answer`    | A model-written answer and the passages it cites          | Embeddings, vector search, the chat model |
+| 2    | `rag_snippets` | Up to three retrieved passages, verbatim                  | Embeddings, vector search                 |
+| 3    | `faq_floor`    | A keyword-matched FAQ answer, or a human hand-off message | Postgres only, or nothing at all          |
 
 Each tier removes one dependency. Tier 3's hand-off message needs nothing, not even the database.
 
@@ -52,6 +52,7 @@ Each tier removes one dependency. Tier 3's hand-off message needs nothing, not e
 ## Why "confident enough" uses four signals
 
 A model's self-reported confidence is poorly calibrated, so it is never the only gate. Tier 1 needs four independent signals to agree:
+
 - **retrieval** found passages above the floor
 - the **citations** point at passages that were actually sent
 - the answer's **wording** is drawn from those passages
@@ -63,22 +64,22 @@ Both thresholds are per-workspace settings (Playground → Ladder settings, admi
 
 Every answer stores why it ended where it did in `answers.decision_note`:
 
-| `decision_note` | Meaning | Tier |
-| --- | --- | --- |
-| `tier1_accepted` | All Tier 1 gates passed | 1 |
-| `tier1_model_error` | The provider threw (rate limit, 5xx, network) | 2 |
-| `tier1_timeout` | The provider exceeded `TIER1_TIMEOUT_MS` | 2 |
-| `tier1_circuit_open` | Skipped: too many recent model failures | 2 |
-| `tier1_budget_exhausted` | Skipped: the workspace's daily model-call budget is spent | 2 |
-| `tier1_invalid_output` | The output wasn't valid JSON for the schema | 2 |
-| `tier1_low_confidence` | Confidence was below the workspace threshold | 2 |
-| `tier1_no_citations` | The answer cited nothing | 2 |
-| `tier1_invalid_citation` | The answer cited a passage it was never given | 2 |
-| `tier1_ungrounded` | Too few of the answer's words appear in its cited passages | 2 |
-| `no_relevant_context` | Nothing cleared the similarity floor | 3 |
-| `retrieval_failed` | Embedding or vector search failed | 3 |
-| `retrieval_timeout` | Embedding plus search exceeded `RETRIEVAL_TIMEOUT_MS` | 3 |
-| `retrieval_circuit_open` | Skipped: too many recent retrieval failures | 3 |
+| `decision_note`          | Meaning                                                    | Tier |
+| -------------------------- | ---------------------------------------------------------- | ---- |
+| `tier1_accepted`         | All Tier 1 gates passed                                    | 1    |
+| `tier1_model_error`      | The provider threw (rate limit, 5xx, network)              | 2    |
+| `tier1_timeout`          | The provider exceeded `TIER1_TIMEOUT_MS`                 | 2    |
+| `tier1_circuit_open`     | Skipped: too many recent model failures                    | 2    |
+| `tier1_budget_exhausted` | Skipped: the workspace's daily model-call budget is spent  | 2    |
+| `tier1_invalid_output`   | The output wasn't valid JSON for the schema                | 2    |
+| `tier1_low_confidence`   | Confidence was below the workspace threshold               | 2    |
+| `tier1_no_citations`     | The answer cited nothing                                   | 2    |
+| `tier1_invalid_citation` | The answer cited a passage it was never given              | 2    |
+| `tier1_ungrounded`       | Too few of the answer's words appear in its cited passages | 2    |
+| `no_relevant_context`    | Nothing cleared the similarity floor                       | 3    |
+| `retrieval_failed`       | Embedding or vector search failed                          | 3    |
+| `retrieval_timeout`      | Embedding plus search exceeded `RETRIEVAL_TIMEOUT_MS`    | 3    |
+| `retrieval_circuit_open` | Skipped: too many recent retrieval failures                | 3    |
 
 ## The decision trace
 
@@ -104,7 +105,7 @@ The console playground and the audit log both render it. The widget never shows 
 With `AI_PROVIDER=fake`, include a marker in a question:
 
 | Marker | Simulates | Expected result |
-| --- | --- | --- |
+| ------------------ | ---------------------------------- | ---------------------------------------------------- |
 | `[fail:error]` | A 503 from the model API | Tier 2, `tier1_model_error` |
 | `[fail:timeout]` | A model that never responds | Tier 2 after `TIER1_TIMEOUT_MS`, `tier1_timeout` |
 | `[fail:json]` | Prose instead of JSON | Tier 2, `tier1_invalid_output` |
