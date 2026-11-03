@@ -22,15 +22,8 @@
   <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white">
   <img alt="Gemini" src="https://img.shields.io/badge/Gemini-3.5-8E75B2?logo=googlegemini&logoColor=white">
 </p>
-
 <p align="center">
-  <img src="docs/assets/screenshots/playground.png" alt="The Omni.io playground: a Tier 1 answer with a verified citation and its decision trace" width="880">
-</p>
----
- Find me
-
-<p>
-  <a href="https://juh-bukhari.vercel.app"><img alt="Portfolio" src="https://img.shields.io/badge/Portfolio-0A0A0A?style=flat-square&logo=vercel&logoColor=white" /></a>
+  <a href="https://juhbukhari.vercel.app"><img alt="Portfolio" src="https://img.shields.io/badge/Portfolio-0A0A0A?style=flat-square&logo=vercel&logoColor=white" /></a>
   <a href="https://juh-bukhari.vercel.app/resume.pdf"><img alt="Résumé" src="https://img.shields.io/badge/R%C3%A9sum%C3%A9-4B5563?style=flat-square&logo=adobeacrobatreader&logoColor=white" /></a>
   <a href="https://juh-bukhari.vercel.app/case-study"><img alt="Case Study" src="https://img.shields.io/badge/Case%20Study-7C3AED?style=flat-square&logo=readthedocs&logoColor=white" /></a>
   <a href="https://linkedin.com/in/jawad-ul-hadi"><img alt="LinkedIn" src="https://img.shields.io/badge/LinkedIn-0A66C2?style=flat-square&logo=linkedin&logoColor=white" /></a>
@@ -42,6 +35,10 @@
   <img alt="Email" src="https://img.shields.io/badge/Email-EA4335?style=flat-square&logo=gmail&logoColor=white" />
 </a>
 </p>
+<p align="center">
+  <img src="docs/assets/screenshots/playground.png" alt="The Omni.io playground: a Tier 1 answer with a verified citation and its decision trace" width="880">
+</p>
+
 ---
 
 ## Why Omni.io
