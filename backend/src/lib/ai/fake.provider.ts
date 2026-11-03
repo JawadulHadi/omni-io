@@ -1,10 +1,22 @@
 import { AiProvider, EMBEDDING_DIMENSIONS, GenerateInput, GenerateOutput, l2normalize } from './ai.provider';
 
-const STOPWORDS = new Set(
-  'a an and are as at be but by can do does for from how i if in is it its me my no not of on or our so that the their them then there these they this to us was we what when where which who why will with you your'.split(
-    ' ',
-  ),
-);
+const STOPWORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'can', 'do', 'does',
+  'for', 'from', 'how', 'i', 'if', 'in', 'is', 'it', 'its', 'me', 'my', 'no',
+  'not', 'of', 'on', 'or', 'our', 'so', 'that', 'the', 'their', 'them', 'then',
+  'there', 'these', 'they', 'this', 'to', 'us', 'was', 'we', 'what', 'when',
+  'where', 'which', 'who', 'why', 'will', 'with',
+]);
+
+const FAILURE_MODES = ['error', 'timeout', 'json', 'lowconf', 'cite'] as const;
+type FailureMode = (typeof FAILURE_MODES)[number];
+
+const extractFailureMode = (query: string): FailureMode | undefined => {
+  const match = /\[fail:(error|timeout|json|lowconf|cite)\]/i.exec(query);
+  return match ? (match[1].toLowerCase() as FailureMode) : undefined;
+};
+
+const abortReason = (signal: AbortSignal): unknown => signal.reason ?? new Error('The operation was aborted');
 
 /**
  * Deterministic, offline stand-in for a real model — used by tests and local dev
@@ -25,26 +37,31 @@ export class FakeProvider implements AiProvider {
   }
 
   async generateAnswer({ query, chunks, signal }: GenerateInput): Promise<GenerateOutput> {
-    const mode = /\[fail:(error|timeout|json|lowconf|cite)\]/i.exec(query)?.[1]?.toLowerCase();
+    const mode = extractFailureMode(query);
     const tokensIn = approxTokens(query) + chunks.reduce((n, c) => n + approxTokens(c.content), 0);
 
     if (mode === 'error') throw new Error('Simulated 503 from the model API');
     if (mode === 'timeout') {
       return new Promise((_, reject) => {
-        if (signal.aborted) return reject(signal.reason);
-        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        if (signal.aborted) return reject(abortReason(signal));
+        signal.addEventListener('abort', () => reject(abortReason(signal)), { once: true });
       });
     }
     if (mode === 'json') {
-      return { rawText: 'Sure! Here is what I found: {"answer": "unterminated', model: this.chatModel, tokensIn, tokensOut: 12 };
+      return {
+        rawText: '{"answer": "unterminated',
+        model: this.chatModel,
+        tokensIn,
+        tokensOut: 12,
+      };
     }
 
     const top = chunks[0];
-    const rawText = JSON.stringify({
-      answer: top ? extractiveAnswer(query, top.content) : 'I do not know.',
-      citedChunkIds: mode === 'cite' ? ['00000000-0000-0000-0000-000000000000:0'] : top ? [top.id] : [],
-      confidence: mode === 'lowconf' ? 0.2 : top ? 0.9 : 0,
-    });
+    const answer = top ? extractiveAnswer(query, top.content) : 'I do not know.';
+    const citedChunkIds = mode === 'cite' ? ['00000000-0000-0000-0000-000000000000:0'] : top ? [top.id] : [];
+    const confidence = mode === 'lowconf' ? 0.2 : top ? 0.9 : 0;
+    const rawText = JSON.stringify({ answer, citedChunkIds, confidence });
+
     return { rawText, model: this.chatModel, tokensIn, tokensOut: approxTokens(rawText) };
   }
 }
@@ -83,11 +100,23 @@ const approxTokens = (s: string) => Math.ceil(s.length / 4);
  * are dropped. Good enough to make offline demos read like real answers.
  */
 export function extractiveAnswer(query: string, passage: string, max = 2): string {
+  if (!query.trim() || !passage.trim()) return '';
+
   const body = passage.replace(/^\s{0,3}#{1,6}\s.*$/gm, ' ').replace(/\s+/g, ' ').trim();
-  const sentences = (body.match(/[^.!?]+[.!?]+/g) ?? [body.slice(0, 300)]).map((s) => s.trim()).filter(Boolean);
+  if (!body) return '';
+
+  const sentences = (body.match(/[^.!?]+[.!?]+/g) ?? [body]).map((s) => s.trim()).filter(Boolean);
   const wanted = new Set(contentWords(query));
-  const scored = sentences.map((text, index) => ({ text, index, score: contentWords(text).filter((w) => wanted.has(w)).length }));
-  const best = scored.some((s) => s.score > 0) ? [...scored].sort((a, b) => b.score - a.score || a.index - b.index).slice(0, max) : scored.slice(0, max);
+  const scored = sentences.map((text, index) => ({
+    text,
+    index,
+    score: contentWords(text).filter((w) => wanted.has(w)).length,
+  }));
+
+  const best = scored.some((s) => s.score > 0)
+    ? [...scored].sort((a, b) => b.score - a.score || a.index - b.index).slice(0, max)
+    : scored.slice(0, max);
+
   return best
     .sort((a, b) => a.index - b.index)
     .map((s) => s.text)
