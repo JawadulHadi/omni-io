@@ -1,0 +1,87 @@
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup:
+    runs-on: ubuntu-latest
+    env:
+      CI: "true"
+      NODE_ENV: development
+      PORT: "3000"
+
+      # --- Database ---
+      DATABASE_URL: postgres://omniio_app:omniio_app@localhost:5432/omniio
+      DATABASE_MIGRATOR_URL: postgres://omniio:omniio@localhost:5432/omniio
+      REDIS_URL: redis://localhost:6379
+      DB_STATEMENT_TIMEOUT_MS: "30000"
+
+      # --- Auth ---
+      JWT_SECRET: change-me-to-a-long-random-string-of-at-least-32-chars
+      COOKIE_SECURE: "false"
+      CONSOLE_ORIGIN: http://localhost:5173
+      TRUST_PROXY: "0"
+      ALLOW_SIGNUP: "true"
+      MAX_WORKSPACES_PER_USER: "5"
+
+      # --- Google sign-in ---
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+      GOOGLE_CALLBACK_URL: http://localhost:5173/auth/google/callback
+
+      # --- AI provider ---
+      AI_PROVIDER: fake
+      GEMINI_API_KEY: ""
+      GEMINI_CHAT_MODEL: gemini-3.5-flash
+      GEMINI_EMBED_MODEL: gemini-embedding-2
+      TIER1_TIMEOUT_MS: "8000"
+      RETRIEVAL_TIMEOUT_MS: "4000"
+      TIER1_MIN_GROUNDING: "0.2"
+
+      # --- Cost ceilings ---
+      TIER1_DAILY_LIMIT_PER_WORKSPACE: "1000"
+      ASK_LIMIT_PER_USER: "30"
+      INGEST_LIMIT_PER_WORKSPACE: "60"
+      WIDGET_LIMIT_PER_IP: "20"
+      WIDGET_LIMIT_PER_WORKSPACE: "300"
+
+      # --- Storage & retention ---
+      STORAGE_DRIVER: none
+      STORAGE_DIR: ./storage
+      ANSWER_RETENTION_DAYS: "90"
+
+      # --- Optional runtime toggles ---
+      RUN_WORKER_IN_PROCESS: "false"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Backend typecheck
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Frontend typecheck
+        working-directory: frontend
+        run: npm run typecheck
