@@ -28,7 +28,7 @@ function makeClient(refresh: () => Promise<unknown>) {
 
   const client = new Client({
     url: `${API_BASE}/graphql`,
-    fetchOptions: { credentials: 'include' },
+    fetchOptions: { credentials: 'include', headers: { 'content-type': 'application/json' } },
     exchanges: [
       cacheExchange,
       authExchange(async (utils) => ({
