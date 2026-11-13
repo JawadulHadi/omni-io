@@ -19,7 +19,7 @@
     "@apollo/server": "^5.5.1",
     "@as-integrations/express5": "^1.1.2",
     "@aws-sdk/client-s3": "^3.1165.0",
-    "@aws-sdk/s3-request-presigner": "^3.1161.0",
+    "@aws-sdk/s3-request-presigner": "^3.1165.0",
     "@google/genai": "^2.32.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@nestjs/apollo": "^14.1.2",
