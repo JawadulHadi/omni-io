@@ -13,9 +13,9 @@
     "@urql/exchange-auth": "^3.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "graphql": "^17.0.2",
+    "graphql": "^17.1.0",
     "graphql-ws": "^6.4.1",
-    "lucide-react": "^1.67.0",
+    "lucide-react": "^1.71.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5",
@@ -27,10 +27,10 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^6.2.1",
+    "@vitejs/plugin-react": "^6.3.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.6"
+    "vite": "^8.3.7"
   },
   "engines": {
     "node": ">=20.16"
