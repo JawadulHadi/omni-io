@@ -37,7 +37,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "dotenv": "^18.0.9",
-    "graphql": "^16.9.0",
+    "graphql": "^16.15.0",
     "graphql-subscriptions": "^2.0.0",
     "ioredis": "^5.4.1",
     "pdf-parse": "^2.4.5",
